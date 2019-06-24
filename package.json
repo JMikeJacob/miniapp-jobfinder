@@ -1,0 +1,17 @@
+{
+  "name": "goodjob",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "nodemon ./bin/www"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "express": "~4.16.1",
+    "knex": "^0.17.6",
+    "lodash": "^4.17.11",
+    "morgan": "~1.9.1",
+    "mysql": "^2.17.1"
+  }
+}
