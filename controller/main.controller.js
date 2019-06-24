@@ -1,6 +1,6 @@
 const repo = require('../repository/main.repository')
 const _ = require('lodash')
-
+const helper = require('./main.helper')
 /*
     validations:
         email
@@ -37,26 +37,24 @@ const _ = require('lodash')
             view applications
 */
 
-function validateEmail(str) {
-    let re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
-    return re.test(String(str).toLowerCase())
-}
-
 module.exports = {
-        
     //create account
     createAccount: (req, res, next) => {
         if(!req.body.email || !req.body.password || !req.body.lastname || !req.body.firstname) {
             res.send("REQUIRED FIELDS NULL")
             return false
         }
-        if(!validateEmail(req.body.email)) {
+        if(!helper.validateEmail(req.body.email)) {
             res.send(req.body.email + " IS NOT A VALID EMAIL ADDRESS")
             return false
         }
         //alphanumeric only
         if(req.body.password.length < 8) {
             res.send("PASSWORD MUST BE AT LEAST 8 CHARACTERS LONG")
+            return false
+        }
+        if(!helper.validateLength(req.body.lastname) || !helper.validateLength(req.body.firstname) || !helper.validateLength(req.body.email)) {
+            res.send("NAMES AND EMAIL SHOULD NOT EXCEED 320 CHARACTERS")
             return false
         }
         let role = req.query.role || "candidate"
