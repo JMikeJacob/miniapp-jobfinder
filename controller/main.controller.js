@@ -252,22 +252,24 @@ module.exports = {
         let role = req.query.role || "candidate"
         if(role != "candidate") {
             res.send("must be a jobseeker")
-            return Promise.resolve()
+            return false
         }
         //check if jobseeker exists
         repo.getSeeker(req.params.id).then((data) => {
-            if(data[0].length === 0) {
-                res.send("User not registered")
-                return Promise.resolve()
-            }})
-        //check if user
-        repo.editSeekerProfile(req.params.id, req.body)   
-            .then(() => {
-                res.send("Jobseeker Profile Created!")
-            }).catch((e) => {
-                console.log(e.message)
-                res.send("User not in database")
-            })
+                if(data[0].length === 0) {
+                    res.send("User not registered")
+                    return Promise.reject(new Error("no user"))
+                }
+                else {
+                    return Promise.resolve()
+                }
+            }).then(() => {
+                    return repo.editSeekerProfile(req.params.id, req.body)
+                }).then(() => {
+                    res.send("Jobseeker Profile Updated!")
+                }).catch((e) => {
+                    console.log(e.message)
+                })   
     },
 
     //edit seeker tags
@@ -275,24 +277,31 @@ module.exports = {
         let role = req.query.role || "candidate"
         if(role != "candidate") {
             res.send("must be a jobseeker")
-            return Promise.resolve()
+            return false
         }
-        //check if user
-        //check tags if valid
-        //if tags are not in database, add tag to database
-        repo.delSeekerTags(req.params.id).then(() => {
-            Promise.all(JSON.parse(req.body.tags).map((tag) => {
-                repo.addSeekerTags(req.params.id, tag)
-            })).then(() => {
-                res.send("Jobseeker tags updated!")
+        repo.getSeeker(req.params.id).then((data) => {
+                if(data[0].length === 0) {
+                    res.send("User not registered")
+                    return Promise.reject(new Error("no user"))
+                }
+                else {
+                    return Promise.resolve()
+                }
+            }).then(() => {
+                return repo.delSeekerTags(req.params.id)
+            }).then(() => {
+                Promise.all(JSON.parse(req.body.tags).map((tag) => {
+                    repo.addSeekerTags(req.params.id, tag)
+                })).then(() => {
+                    res.send("Jobseeker tags updated!")
+                }).catch((e) => {
+                    console.log(e.message)
+                    return Promise.reject(e)
+                })
             }).catch((e) => {
                 console.log(e.message)
                 res.send("Error connecting to message")
             })
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to message")
-        })
     },
 
     //edit company profile (main recruiter only)

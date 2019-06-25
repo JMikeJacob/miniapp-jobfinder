@@ -185,12 +185,13 @@ module.exports = {
 
     //view job list
     getJobList: () => {
-        return knex.raw("SELECT * FROM job_post")
+        // return knex.raw("SELECT * FROM job_post ORDER BY date_posted DESC")
+        return knex.select('*').from('job_post').orderBy('date_posted', 'desc')
     },
 
     //get jobs posted by employer account
     getJobListByPoster: (userId) => {
-        return knex.select('*').from('job_post').where({posted_by_id:userId})
+        return knex.select('*').from('job_post').where({posted_by_id:userId}).orderBy('date_posted','desc')
     },
 
     //view job post
@@ -221,7 +222,7 @@ module.exports = {
 
     getMatchingTags: (userId) => {
         // return knex.select('*').from('seeker_tags').innerJoin('job_tags', 'seeker_tags.user_id', 'job_tags.job_id')
-        return knex.raw("SELECT job_id, COUNT(*) AS match_count FROM job_tags INNER JOIN seeker_tags ON job_tags.tag = seeker_tags.tag WHERE seeker_tags.user_id = ? GROUP BY job_tags.job_id", [userId])
+        return knex.raw("SELECT job_id, COUNT(*) AS match_count FROM job_tags INNER JOIN seeker_tags ON job_tags.tag = seeker_tags.tag WHERE seeker_tags.user_id = ? GROUP BY job_tags.job_id ORDER BY match_count DESC", [userId])
     },
 
     verifyJobStatus: (jobId) => {
