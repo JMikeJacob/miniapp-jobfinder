@@ -5,7 +5,17 @@ module.exports = {
     },
 
     validateLength: (str) => {
-        if(str.length > 50) return false
+        if(str.length > 320) return false
         return true
+    },
+
+    validateContact: (str) => {
+        let re = /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\./0-9]*$/
+        return re.test(String(str).toLowerCase())
+    },
+
+    validateInt: (str) => {
+        let re = /^[0-9]*$/
+        return re.test(String(str).toLowerCase())
     }
 }

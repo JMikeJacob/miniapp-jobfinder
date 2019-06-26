@@ -12,7 +12,7 @@ const knex = require('knex')({
 module.exports = {
     //create account
     createAccount: (role, data) => {
-        if(role === 'candidate') {
+        if(role === 'seeker') {
             return knex.raw("INSERT INTO seeker_accounts VALUES(null,?,?,?,?,?)", 
                             [data.lastname, data.firstname, data.email, data.password, role])
                         .then((data) => { //initialize user profile
@@ -25,8 +25,8 @@ module.exports = {
                             [data.email, data.password, data.company, data.lastname,
                              data.firstname, data.contact, role])
                         .then((results) => { //initialize user profile
-                        return knex.raw("INSERT INTO company_profile(company_id, name, recruiter_id) VALUES(null, ?, ?)",
-                                    [data.company, results[0].insertId])
+                        return knex.raw("INSERT INTO company_profile(company_id, name) VALUES(?, ?)",
+                                    [results[0].insertId, data.company])
                         })
         }
         else {
@@ -36,13 +36,11 @@ module.exports = {
 
     //login account
     loginAccount: (role, data) => {
-        if(role === 'candidate') {
-            return knex.raw("SELECT * FROM seeker_accounts WHERE email = ? AND password = ?", 
-                            [data.email, data.password])
+        if(role === 'seeker') {
+            return knex.select('*').from('seeker_accounts').where({email:data.email, password:data.password})
         }
         else if(role === 'employer') {
-            return knex.raw("SELECT * FROM recruiters WHERE email = ? AND password = ?",
-                            [data.email, data.password])
+            return knex.select('*').from('recruiters').where({email:data.email, password:data.password})
         }
         else {
             return Promise.reject(new Error("role unknown"))
@@ -51,7 +49,7 @@ module.exports = {
 
     //delete account
     delAccount: (role, userId) => {
-        if(role === 'candidate') {
+        if(role === 'seeker') {
             return knex.raw("DELETE FROM seeker_accounts WHERE user_id = ?", 
                             [userId])
                         .then(() => {
@@ -68,7 +66,7 @@ module.exports = {
                             return knex.raw("DELETE FROM job_tags WHERE posted_by_id = ?", [userId])
                         })
                         .then(() => {
-                            return knex.raw("DELETE FROM company_profile WHERE recruiter_id = ?", userId)
+                            return knex.raw("DELETE FROM company_profile WHERE company_id = ?", userId)
                         })
         }
         else {
@@ -91,28 +89,33 @@ module.exports = {
     },
 
     //get specific seeker
-    getSeeker: (userId, data) => {
-        return knex.select('*').from('seeker_accounts').where({user_id: userId, email: data.email})
+    getSeekerById: (userId) => {
+        return knex.select('*').from('seeker_accounts').where({user_id: userId})
     },
 
     //get seeker by email
-    getSeekerAccount: (data) => {
+    getSeekerByEmail: (data) => {
         return knex.select('*').from('seeker_accounts').where({email:data})
     },
 
     //get specific employer
-    getEmployer: (userId) => {
+    getEmployerById: (userId) => {
         return knex.select('*').from('recruiters').where({user_id: userId})
     },
 
     //get employer by email
-    getEmployerAccount: (key, data) => {
-        return knex.select('*').from('recruiters').where({user_id:key, email:data})
+    getEmployerByEmail: (data) => {
+        return knex.select('*').from('recruiters').where({email:data})
     },
 
     //get company account
-    getCompanyAccount: (data) => {
+    getCompanyByName: (data) => {
         return knex.select('*').from('company_profile').where({name:data})
+    },
+
+    //get company account
+    getCompanyById: (data) => {
+        return knex.select('*').from('company_profile').where({company_id:data})
     },
 
     //delete company profile
@@ -139,9 +142,9 @@ module.exports = {
     },
 
     //edit company profile
-    editCompanyProfile: (data) => {
+    editCompanyProfile: (key, data) => {
         return knex.raw("UPDATE company_profile SET name = ?, website = ?, description = ?, establishment_date = ?, location = ? WHERE company_id = ?", 
-                        [data.company, data.website, data.desc, data.establish, data.location, data.basis])
+                        [data.company, data.website, data.desc, data.establish, data.location, key])
     },
 
     //get company profile
@@ -156,15 +159,15 @@ module.exports = {
 
     //create job post
     createJobPost: (data) => {
-        return knex.raw("INSERT INTO job_post VALUES(null,?,?,?,?,?,?,?,?,?,?)",
+        return knex.raw("INSERT INTO job_post VALUES(null,?,?,?,?,?,?,?,?,?,?,?)",
                         [data.jobname, data.company, data.type, data.level, data.recruiter,
-                         data.location, data.desc, data.qual, data.isopen, data.post]).then(null, console.log)
+                         data.location, data.desc, data.qual, data.isopen, data.post, data.deadline]).then(null, console.log)
     },
 
     //edit job post
     editJobPost: (jobId, data) => {
-        return knex.raw("UPDATE job_post SET job_name = ?, type = ?, level = ?, job_location = ?, description = ?, qualifications = ?, is_open = ? WHERE job_id = ?", 
-                        [data.jobname, data.type, data.level, data.location, data.desc, data.qual, data.isopen, jobId]).then(null, console.log)
+        return knex.raw("UPDATE job_post SET job_name = ?, type = ?, level = ?, job_location = ?, description = ?, qualifications = ?, is_open = ?, date_deadline = ? WHERE job_id = ?", 
+                        [data.jobname, data.type, data.level, data.location, data.desc, data.qual, data.isopen, data.deadline, jobId]).then(null, console.log)
     },
 
     addJobTags: (jobId, userId, data) => {
@@ -234,16 +237,20 @@ module.exports = {
     },
 
     applyForJob: (data) => {
-        return knex.raw("INSERT INTO applications VALUES(null,?,?,?,?)", 
-                         [data.userId, data.jobId, data.recId, "pending"])
+        return knex.raw("INSERT INTO applications VALUES(null,?,?,?,?,?)", 
+                         [data.userId, data.jobId, data.recId, "pending", data.applied])
+    },
+
+    getApplication: (data) => {
+        return knex.select('*').from('applications').where({job_id:data.jobId, user_id:data.userId})
     },
 
     getApplications: (userId) => {
-        return knex.select('*').from('applications').where({recruiter_id:userId})
+        return knex.select('*').from('applications').where({recruiter_id:userId}).orderBy('date_applied', 'desc')
     },
 
     getApplicationsForJob: (jobId) => {
-        return knex.select('*').from('applications').where({job_id:jobId})
+        return knex.select('*').from('applications').where({job_id:jobId}).orderBy('date_applied', 'desc')
     },
 
     editApplicationStatus: (jobId, data) => {

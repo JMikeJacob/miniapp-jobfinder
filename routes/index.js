@@ -26,7 +26,7 @@ router.get('/master', controller.getAllUsers)
 router.put('/seeker/profile/:id', controller.editSeekerProfile)
 
 //edit jobseeker tags
-router.put('seeker/profile/tags/:id', controller.editSeekerTags)
+router.put('/seeker/profile/:id/tags', controller.editSeekerTags)
 
 //view job board
 router.get('/jobs/all', controller.getJobList)
@@ -44,7 +44,7 @@ router.get('/seeker/applications', controller.getApplicationsSeeker)
 // router.delete('/seeker/applications/:id', controller.delApplication)
 
 //edit company profile
-router.put('/company/profile/', controller.editCompanyProfile)
+router.put('/company/:id', controller.editCompanyProfile)
 
 //create job post
 router.post('/employer/jobs/new', controller.createJobPost)

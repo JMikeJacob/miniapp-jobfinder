@@ -1,6 +1,21 @@
 const repo = require('../repository/main.repository')
 const _ = require('lodash')
 const helper = require('./main.helper')
+
+const error_messages = {
+    registered: "Email already registered!",
+    server: "Something went wrong in our server. Please try again after a while!",
+    required: "Required fields should not be left blank!",
+    email: "Not a valid email address",
+    password: "Password should be 8 or more characters long",
+    contact: "Contact number should only contain numbers and be less than 20 characters long",
+    company_exists: "Company name already registered!",
+    no_account: "Incorrect email/password",
+    no_existing: "Account not registered",
+    no_company: "Company not registered",
+    bad_date: "Invalid date",
+    bad_id: "Invalid ID"
+}
 /*
     validations:
         email
@@ -35,185 +50,200 @@ const helper = require('./main.helper')
         delete recruiter subuser (main)
         subuser can:
             view applications
+
+    database (weekend?)
+        - seeker_profile: add education, job history
+        - seeker_education:
+        - seeker_history:
 */
 
 module.exports = {
     //create account
     createAccount: (req, res, next) => {
-        if(!req.body.email || !req.body.password || !req.body.lastname || !req.body.firstname) {
-            res.send("REQUIRED FIELDS NULL")
-            return false
-        }
-        if(!helper.validateEmail(req.body.email)) {
-            res.send(req.body.email + " IS NOT A VALID EMAIL ADDRESS")
-            return false
-        }
-        //alphanumeric only
-        if(req.body.password.length < 8) {
-            res.send("PASSWORD MUST BE AT LEAST 8 CHARACTERS LONG")
-            return false
-        }
-        if(!helper.validateLength(req.body.lastname) || !helper.validateLength(req.body.firstname) || !helper.validateLength(req.body.email)) {
-            res.send("NAMES AND EMAIL SHOULD NOT EXCEED 320 CHARACTERS")
-            return false
-        }
-        let role = req.query.role || "candidate"
-        if(role != "candidate" && role != "employer") {
-            role = "candidate"
-        }
-        if(role === 'employer') {
-            if(!req.body.company || !req.body.contact) {
-                res.send("REQUIRED FIELDS NULL")
-                return false
+        try {
+            if(!req.body.email || !req.body.password || !req.body.lastname || !req.body.firstname) {
+                throw new Error(error_messages.required)
             }
-        }
-        let userFlag = false
-        if(role === 'candidate') {
-            //check if account exists
-            repo.getSeekerAccount(req.body.email).then((results) => {
-                if(results.length === 0) {
-                    userFlag = true
-                }
-                else {
-                    userFlag = false
-                    res.send("Email already registered")
-                    return Promise.resolve()
-                }
-            }).then(() => {
-                //create account
-                return repo.createAccount(role, req.body)
-                .then(() => {
-                    if(role === 'candidate') {
-                        // res.writeHead(200, '{Content-Type: text/plain}')
-                        res.send("User " + req.body.firstname + " " + req.body.lastname + " created!")
-                        return Promise.resolve()
+            else if(!helper.validateEmail(req.body.email)) {
+                throw new Error(error_messages.email)
+            }
+            else if(req.body.password.length < 8) {
+                throw new Error(error_messages.password)
+            }
+
+            let role = req.query.role || "seeker"
+            if(role != "seeker" && role != "employer")  {
+                role = "seeker"
+            }
+
+            if(role === "seeker") {
+                //check if account exists
+                repo.getSeekerByEmail(req.body.email).then((results) => {
+                    if(results.length === 0) {
+                        //create new account
+                        return repo.createAccount(role, req.body)
+                    }
+                    else {
+                        //email already registered
+                        return Promise.reject(new Error(error_messages.registered))
+                    }
+                }).then(() => {
+                    //successfully registered
+                    const msg = "Seeker " + req.body.firstname + " " + req.body.lastname + " created!"
+                    res.status(200).send({success: {statusCode: 200, message: msg}})
+                }).catch((err) => {
+                    console.log(err)
+                    if(err.message === error_messages.registered) {
+                        res.status(401).send({error: {statusCode: 401, message: err.message, errorCode: 1}})
+                    }
+                    else {
+                        res.status(500).send({error: {statusCode: 500, message: error_messages.server, statusCode: 1}})
                     }
                 })
-            })
-        }
-        else if(role === 'employer') {
-            //check if email exists
-            Promise.all([repo.getEmployerAccount(req.body.email).then((results) => {
-                if(results.length === 0) {
-                    userFlag = true
-                    return Promise.resolve()
+            }
+
+            else if(role === "employer") {
+                if(!req.body.company || !req.body.contact) {
+                    throw new Error(error_messages.required)
                 }
-                else {
-                    userFlag = false
-                    res.send("Email already registered")
-                    return Promise.reject(new Error("email"))
+                if(req.body.contact.length > 20 || !helper.validateContact(req.body.contact)) {
+                    throw new Error(error_messages.contact)
                 }
-            }), repo.getCompanyAccount(req.body.company).then((results) => {
-                if(results.length === 0) {
-                    userFlag = true
-                    return Promise.resolve()
-                }
-                else {
-                    userFlag = false
-                    console.log(userFlag)
-                    res.send("Company already registered")
-                    return Promise.reject(new Error("company"))
-                }
-            })]).then(() => {
-                //create employer account
-                return repo.createAccount(role, req.body).then(() => {
-                    res.send("Employer " + req.body.firstname + " " + req.body.lastname + " created!")
-                    return Promise.resolve()
+                repo.getEmployerByEmail(req.body.email).then((results) => {
+                    if(results.length === 0) {
+                        //check if company exists
+                        return repo.getCompanyByName(req.body.company)
+                    }
+                    else {
+                        //email already registered
+                        return Promise.reject(new Error(error_messages.registered))
+                    }
+                }).then((results) => {
+                    if(results.length === 0) {
+                        //create new account
+                        return repo.createAccount(role, req.body)
+                    }
+                    else {
+                        //company already registered
+                        return Promise.reject(new Error(error_messages.company_exists))
+                    }
+                }).then(() => {
+                    //successfully registered
+                    const msg = "Employer " + req.body.firstname + " " + req.body.lastname + " created!"
+                    res.status(200).send({success: {statusCode: 200, message: msg}})
+                }).catch((err) => {
+                    console.log(err)
+                    if(err.message === error_messages.registered || err.message === error_messages.company_exists) {
+                        res.status(401).send({error: {statusCode: 401, message: err.message, errorCode: 1}})
+                    }
+                    else {
+                        res.status(500).send({error: {statusCode: 500, message: error_messages.server, statusCode: 1}})
+                    }
                 })
-            }).catch((e) => {
-                console.log(e.message)
-                // res.writeHead(404)
-                res.send("Account Creation failed!")
-                return false
-            })
+            }
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error: {statusCode: 400, message: err.message, errorCode: 1}})
         }
     },
 
-    // login account
+    //login account
     loginAccount: (req, res, next) => {
-        if(!validateEmail(req.body.email)) {
-            res.send(req.body.email + "is not a valid email address")
-            return false
-        }
-        if(req.body.password.length < 8) {
-            res.send("Password must be at least 8 characters")
-            return false
-        }
-        let role = req.query.role || "candidate"
-        if(role != "candidate" && role != "employer") {
-            role = "candidate"
-        }
-        repo.loginAccount(role, req.body)
-            .then((data) => {
+        try {
+            if(!helper.validateEmail(req.body.email)) {
+                throw new Error(error_messages.email)
+            }
+            if(req.body.password.length < 8) {
+                throw new Error(error_messages.password)
+            }
+            let role = req.query.role || "seeker"
+            if(role != "seeker" && role != "employer") {
+                role = "seeker"
+            }
+            repo.loginAccount(role, req.body).then((data) => {
+                console.log(data)
                 //check if no matches
-                if(data[0].length === 0) {
-                    // res.writeHead(404, '{Content-Type: text/plain}')
-                    res.send("Incorrect email and/or password")
-                    Promise.resolve()
+                if(data.length === 0) {
+                    return Promise.reject(new Error(error_messages.no_account))
                 }
                 else {
-                    // res.writeHead(200, '{Content-Type: text/plain}')
-                    res.send("Welcome, " + role + " " + data[0][0].first_name)
-                    Promise.resolve()
+                    const msg = "Welcome, " + role + " " + data[0].first_name + " " + data[0].last_name
+                    res.status(200).send({success: {message:msg}})
+                    return Promise.resolve()
+                }
+            }).catch((err) => {
+                console.log(err)
+                if(err.message === error_messages.no_account) {
+                    res.status(401).send({error: {statusCode:401, message: err.message, errorCode: 1}})
+                }
+                else {
+                    res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 1}})
                 }
             })
-            .catch((e) => {
-                console.log(e)
-                // res.writeHead(404)
-                res.send("Error connecting to database")
-            })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error: {statusCode:400, message: err.message, errorCode: 1}})
+        }
     },
 
     //delete account
     delAccount: (req, res, next) => {
-        //check if user
-        let role = req.query.role || "candidate"
-        let userFlag = false
-        if(role != "candidate" && role != "employer") {
-            role = "candidate"
-        }
-        //check if jobseeker exists
-        if(role === "candidate") {
-            repo.getSeekerAccount(req.params.id, req.body).then((data) => {
-                if(data.length === 0) {
-                    return Promise.reject(new Error("no user"))
-                }
-                else {
-                    return Promise.resolve()
-                }
-            }).then(() => {
-                return repo.delAccount(role, req.params.id)
-            }).then(() => {
-                res.send(role + " " + req.params.id + " deleted!")
-                return Promise.resolve()
-            }).catch((e) => {
-                console.log(e.message)
-                res.send("User not registered")
+        try {
+            //check if user
+            let role = req.query.role || "seeker"
+            if(role != "seeker" && role != "employer") {
+                role = "seeker"
+            }
+            //check if jobseeker exists
+            if(role === "seeker") {
+                repo.getSeekerById(req.params.id).then((data) => {
+                    if(data.length === 0) {
+                        return Promise.reject(new Error(error_messages.no_delete))
+                    }
+                    else { //delete account
+                        return repo.delAccount(role, req.params.id)
+                    }
+                }).then(() => {
+                    const msg = role + " " + req.params.id + " deleted!"
+                    res.send({success: {message: msg}})
+                }).catch((e) => {
+                    console.log(err)
+                    if(err.message = error_messages.no_existing) {
+                        res.send({error:{statusCode:401, message:err.message, errorCode: 1}})
+                    }
+                    res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                })
+            }
 
-                // res.send("Error connecting to database")
-            })
+            //check if employer exists
+            else if(role === "employer") {
+                repo.getEmployerById(req.params.id).then((data) => {
+                    if(data.length === 0) {
+                        return Promise.reject(new Error(error_messages.no_existing))
+                    }
+                    else { //delete account
+                        return repo.delAccount(role, req.params.id)
+                    }
+                }).then(() => {
+                    const msg = role + " " + req.params.id + " deleted!"
+                    res.send({success: {message: msg}})
+                }).catch((err) => {
+                    console.log(err)
+                    if(err.message = error_messages.no_existing) {
+                        res.send({error:{statusCode:401, message:err.message, errorCode: 1}})
+                    }
+                    else {
+                        res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                    }
+                })
+            }
         }
-        //check if employer exists
-        else if(role === "employer") {
-            repo.getEmployerAccount(req.params.id, req.body.email).then((data) => {
-                if(data.length === 0) {
-                    return Promise.reject(new Error("no user"))
-                }
-                else {
-                    userFlag = true
-                    return Promise.resolve()
-                }
-            }).then(() => {
-                return repo.delAccount(role, req.params.id)
-            }).then(() => {
-                res.send(role + " " + req.params.id + " deleted!")
-                return Promise.resolve()
-            }).catch((e) => {
-                console.log(e.message)
-                res.send("User not registered")
-            })
+        catch(err) {
+            console.log(err)
+            res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
         }
-        
     },
 
     //get all users
@@ -229,117 +259,132 @@ module.exports = {
 
     //get seeker account
     getSeeker: (req, res, next) => {
-        repo.getSeeker(req.params.id).then((data) => {
+        repo.getSeekerById(req.params.id).then((data) => {
             res.send(data)
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
+        }).catch((err) => {
+            console.log(err)
+            res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
         })
     },
 
     //get employer account
     getEmployer: (req, res, next) => {
-        repo.getEmployer(req.params.id).then((data) => {
-            res.send(data)
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
-        })
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            repo.getEmployerById(req.params.id).then((data) => {
+                res.send(data)
+            }).catch((e) => {
+                console.log(err)
+                res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.send({error:{statusCode:400, message:error_messages.bad_id, errorCode: 1}})
+        }
     },
 
     //create seeker profile
     editSeekerProfile: (req, res, next) => {
-        let role = req.query.role || "candidate"
-        if(role != "candidate") {
-            res.send("must be a jobseeker")
-            return false
-        }
-        //check if jobseeker exists
-        repo.getSeeker(req.params.id).then((data) => {
-                if(data[0].length === 0) {
-                    res.send("User not registered")
-                    return Promise.reject(new Error("no user"))
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            //check if jobseeker exists
+            repo.getSeekerById(req.params.id).then((data) => {
+                if(data.length === 0) {
+                    return Promise.reject(new Error(error_messages.no_existing))
                 }
                 else {
-                    return Promise.resolve()
+                    return repo.editSeekerProfile(req.params.id)
                 }
             }).then(() => {
-                    return repo.editSeekerProfile(req.params.id, req.body)
-                }).then(() => {
-                    res.send("Jobseeker Profile Updated!")
-                }).catch((e) => {
-                    console.log(e.message)
-                })   
+                res.send({success:{message: "Jobseeker Profile Updated!"}})
+            }).catch((err) => {
+                console.log(err)
+                res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+        }
     },
 
-    //edit seeker tags
     editSeekerTags: (req, res, next) => {
-        let role = req.query.role || "candidate"
-        if(role != "candidate") {
-            res.send("must be a jobseeker")
-            return false
-        }
-        repo.getSeeker(req.params.id).then((data) => {
-                if(data[0].length === 0) {
-                    res.send("User not registered")
-                    return Promise.reject(new Error("no user"))
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            repo.getSeekerById(req.params.id).then((data) => {
+                if(data.length === 0) {
+                    return Promise.reject(new Error(error_messages.no_existing))
                 }
                 else {
-                    return Promise.resolve()
+                    return repo.delSeekerTags(req.params.id)
                 }
             }).then(() => {
-                return repo.delSeekerTags(req.params.id)
-            }).then(() => {
-                Promise.all(JSON.parse(req.body.tags).map((tag) => {
+                let tags = JSON.parse(req.body.tags)
+                return Promise.all(tags.map((tag) => {
                     repo.addSeekerTags(req.params.id, tag)
-                })).then(() => {
-                    res.send("Jobseeker tags updated!")
-                }).catch((e) => {
-                    console.log(e.message)
-                    return Promise.reject(e)
-                })
-            }).catch((e) => {
-                console.log(e.message)
-                res.send("Error connecting to message")
+                }))
+            }).then(() => {
+                res.send({success:{message: "Jobseeker Tags Updated!"}})
+            }).catch((err) => {
+                console.log(err)
+                res.send({error:{statusCode:500, message: error_messages.server, errorCode: 1}})
             })
+        }
+        catch(err) {
+            console.log(err)
+            if(err.message === error_messages.no_existing) {
+                res.send({error:{statusCode:500, message:err.message, errorCode: 1}})
+            }
+            res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+        }
     },
 
     //edit company profile (main recruiter only)
     editCompanyProfile: (req, res, next) => {
-        let role = req.query.role || "employer"
-        if(role != "employer") {
-            res.send("must be an employer")
-            return false
+        try {
+            if(!helper.validateInt(req.body.establish)) {
+                throw new Error(error_messages.bad_date)
+            }
+            if(!req.body.company) {
+                throw new Error(error_messages.company)
+            }
+            repo.getEmployerById(req.params.id).then((results) => {
+                if(results.length === 0) {
+                    return Promise.reject(new Error(error_messages.no_existing))
+                }
+                else {
+                    return repo.getCompanyById(req.params.id)
+                }
+            }).then((results) => {
+                if(results.length === 0) {
+                    return Promise.reject(new Error(error_messages.no_company))
+                }
+                else {
+                    return repo.editCompanyProfile(req.params.id, req.body)
+                }
+            }).then(() => {
+                res.status(200).send({success:{statusCode:200, message:"Company Profile Updated!"}})
+            }).catch((err) => {
+                console.log(err)
+                if(err.message === error_messages.no_existing || err.message === error_messages.no_company) {
+                    res.status(401).send({error:{statusCode:401, message:err.message, errorCode: 1}})
+                }
+                else {
+                    res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+                }
+            })
         }
-        if(!req.body.company) {
-            res.send("REQUIRED FIELDS NULL")
-            return false
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error:{statusCode:400, message:err.message, errorCode: 1}})
         }
-         //check if employer
-         Promise.all([repo.getEmployer(req.body.recruiter).then((results) => {
-                        if(results.length === 0) {
-                            res.send("user not registered")
-                            return Promise.reject(new Error("user not registered"))
-                        }
-                        else {
-                            return Promise.resolve()
-                        }
-                    }), repo.getCompanyAccount(req.body.basis).then((results) => {
-                        if(results.length === 0) {
-                            res.send("company not registered")
-                            return Promise.reject(new Error("company not registered"))
-                        }
-                        else {
-                            return Promise.resolve()
-                        }
-                    })
-        ]).then(() => {
-            return repo.editCompanyProfile(req.params.id, req.body)
-        }).then(() => {
-            res.send("Profile for " + req.body.company + " updated!")
-        }).catch((e) => {
-            console.log(e.message)
-        })
     },
 
     //get company profile
@@ -366,42 +411,77 @@ module.exports = {
             res.send("Error connecting to database")
         })
     },
-    
+
     //create job post
     createJobPost: (req, res, next) => {
-        if(!req.body.jobname || !req.body.recruiter || !req.body.company) {
-            res.send("REQUIRED FIELDS NULL")
-            return Promise.resolve()
+        try {
+            if(!req.body.jobname || !req.body.recruiter || !req.body.company || !req.body.deadline) {
+                throw new Error(error_messages.required)
+            }
+            if(!helper.validateInt(req.body.post) || !helper.validateInt(req.body.deadline)) {
+                throw new Error(error_messages.bad_date)
+            }
+            //check if employer
+            repo.getEmployerById(req.body.recruiter).then((results) => {
+                if(results.length === 0) {
+                    return Promise.reject(new Error(error_messages.no_existing))
+                }
+                else {
+                    return repo.createJobPost(req.body)
+                }
+            }).then(() => {
+                res.status(200).send({success: {statusCode:200, message: "Job Post Created!"}})
+            }).catch((err) => {
+                console.log(err)
+                if(err.message === error_messages.no_existing) {
+                    res.send({error: {statusCode:401, message:err.message, errorCode: 1}})
+                }
+                else {
+                    res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+                }
+            })
         }
-        //check if employer
-        Promise.all([repo.getEmployer(req.body.recruiter).then((results) => {
-                        if(results.length === 0) {
-                            return Promise.reject(new Error("user not registered"))
-                        }
-                        else {
-                            return Promise.resolve()
-                        }
-                    }), repo.getCompanyAccount(req.body.company).then((results) => {
-                        if(results.length === 0) {
-                            return Promise.reject(new Error("company not registered"))
-                        }
-                        else {
-                            return Promise.resolve()
-                        }
-                    })
-        ]).then(() => {
-            return repo.createJobPost(req.body)
-        })
-        .then(() => {
-            // res.writeHead(200, '{Content-Type: text/plain}')
-            res.send("Job Post for " + req.body.jobname + " in " + req.body.company + " has been posted!")
-        })
-        .catch((e) => {
-            console.log(e)
-            // res.writeHead(404)
-            res.send("Account not registered")
-        })
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error: {statusCode:400, message:err.message, errorCode: 1}})
+        }
     },
+    
+    // //create job post
+    // createJobPost: (req, res, next) => {
+    //     if(!req.body.jobname || !req.body.recruiter || !req.body.company) {
+    //         res.send("REQUIRED FIELDS NULL")
+    //         return Promise.resolve()
+    //     }
+    //     //check if employer
+    //     Promise.all([repo.getEmployer(req.body.recruiter).then((results) => {
+    //                     if(results.length === 0) {
+    //                         return Promise.reject(new Error("user not registered"))
+    //                     }
+    //                     else {
+    //                         return Promise.resolve()
+    //                     }
+    //                 }), repo.getCompanyAccount(req.body.company).then((results) => {
+    //                     if(results.length === 0) {
+    //                         return Promise.reject(new Error("company not registered"))
+    //                     }
+    //                     else {
+    //                         return Promise.resolve()
+    //                     }
+    //                 })
+    //     ]).then(() => {
+    //         return repo.createJobPost(req.body)
+    //     })
+    //     .then(() => {
+    //         // res.writeHead(200, '{Content-Type: text/plain}')
+    //         res.send("Job Post for " + req.body.jobname + " in " + req.body.company + " has been posted!")
+    //     })
+    //     .catch((e) => {
+    //         console.log(e)
+    //         // res.writeHead(404)
+    //         res.send("Account not registered")
+    //     })
+    // },
     
     //edit job credentials
     editJobTags: (req, res, next) => {
@@ -575,15 +655,23 @@ module.exports = {
     //recommended jobs
     getRecommendedJobs: (req, res, next) => {
         //check if jobseeker
-        repo.getMatchingTags(req.params.id).then((results) => {
+        repo.getSeeker(req.params.id).then((data) => {
+            if(data.length === 0) {
+                res.send("USER NOT IN DATABASE")
+                return Promise.reject()
+            }
+            else {
+                return Promise.resolve()
+            }
+        }).then(() => {
+                return repo.getMatchingTags(req.params.id)
+        }).then((results) => {
             if(counts.length === 0) {
                 res.send("no matching jobs found")
                 return Promise.resolve()
             }
-            let counts = _.sortBy(results[0], 'match_count').reverse()
-            let jobs = []
 
-            Promise.all(counts.map((key) => {
+            Promise.all(results[0].map((key) => {
                         return repo.getJobsbyId(Number(key.job_id))
                     }))
                     .then((results) => {
@@ -603,13 +691,19 @@ module.exports = {
             if(data.length === 0) {
                 res.send("USER NOT IN DATABASE")
                 return Promise.resolve()
-            }}).catch((e) => {
-                console.log(e.message)
-                res.send("Error connecting to database")
-            })
-        //check if already applied
-        repo.verifyJobStatus(req.body.jobId)
-            .then((results) => {
+            }}).then(() => {
+                return repo.getApplication(req.body).then((results) => {
+                    if(results.length === 0) {
+                        return Promise.resolve()
+                    }
+                    else {
+                        res.send("Already applied for job")
+                        return Promise.reject()
+                    }
+                })
+            }).then(() =>{
+                return repo.verifyJobStatus(req.body.jobId)
+            }).then((results) => {
                 if(results.length === 0) {
                     res.send("JOB POST DOES NOT EXIST")
                     return Promise.resolve()
@@ -634,7 +728,17 @@ module.exports = {
     getApplications: (req, res, next) => {
         //check if employer
         console.log(req.body.id)
-        repo.getApplications(req.body.userId).then((results) => {
+        repo.getEmployer(req.body.id).then((results) => {
+            if(results.length === 0) {
+                res.send("User not registered")
+                return Promise.reject(new Error("user not registered"))
+            }
+            else {
+                return Promise.resolve()
+            }
+        }).then(() => {
+            return repo.getApplications(req.body.userId)
+        }).then((results) => {
             if(results.length === 0) {
                 res.send("no applications")
                 return Promise.resolve()
@@ -652,6 +756,7 @@ module.exports = {
     getApplicationsForJob: (req, res, next) => {
         //check if employer
         //check if poster
+        
         repo.getApplicationForJob(req.params.id).then((results) => {
             if(results.length === 0) {
                 res.send("no applications for this job")
