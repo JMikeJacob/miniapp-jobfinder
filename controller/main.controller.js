@@ -1,5 +1,6 @@
 const repo = require('../repository/main.repository')
 const _ = require('lodash')
+const session = require('express-session')
 const helper = require('./main.helper')
 
 const error_messages = {
@@ -13,9 +14,16 @@ const error_messages = {
     no_account: "Incorrect email/password",
     no_existing: "Account not registered",
     no_company: "Company not registered",
+    no_job: "Job not posted",
     bad_date: "Invalid date",
-    bad_id: "Invalid ID"
+    bad_id: "Invalid ID",
+    bad_page: "Invalid page number",
+    no_match: "No matching jobs found",
+    applied: "Already applied for job",
+    not_accepting: "No longer accepting applications for that job"
 }
+
+const orders = ['date_posted', 'job_name', 'company', 'salary']
 /*
     validations:
         email
@@ -94,7 +102,7 @@ module.exports = {
                 }).catch((err) => {
                     console.log(err)
                     if(err.message === error_messages.registered) {
-                        res.status(401).send({error: {statusCode: 401, message: err.message, errorCode: 1}})
+                        res.status(400).send({error: {statusCode: 401, message: err.message, errorCode: 1001}})
                     }
                     else {
                         res.status(500).send({error: {statusCode: 500, message: error_messages.server, statusCode: 1}})
@@ -127,14 +135,14 @@ module.exports = {
                         //company already registered
                         return Promise.reject(new Error(error_messages.company_exists))
                     }
-                }).then(() => {
+                }).then((results) => {
                     //successfully registered
                     const msg = "Employer " + req.body.firstname + " " + req.body.lastname + " created!"
-                    res.status(200).send({success: {statusCode: 200, message: msg}})
+                    res.status(200).send({success: {statusCode: 200, message: msg, data: results}})
                 }).catch((err) => {
                     console.log(err)
                     if(err.message === error_messages.registered || err.message === error_messages.company_exists) {
-                        res.status(401).send({error: {statusCode: 401, message: err.message, errorCode: 1}})
+                        res.status(400).send({error: {statusCode: 400, message: err.message, errorCode: 1002}})
                     }
                     else {
                         res.status(500).send({error: {statusCode: 500, message: error_messages.server, statusCode: 1}})
@@ -144,13 +152,17 @@ module.exports = {
         }
         catch(err) {
             console.log(err)
-            res.status(400).send({error: {statusCode: 400, message: err.message, errorCode: 1}})
+            res.status(400).send({error: {statusCode: 400, message: err.message, errorCode: 1000}})
         }
     },
 
     //login account
     loginAccount: (req, res, next) => {
         try {
+            // console.log(req.session.id)
+            // if(req.session.user) {
+            //     throw new Error("Currently logged in")
+            // }
             if(!helper.validateEmail(req.body.email)) {
                 throw new Error(error_messages.email)
             }
@@ -168,14 +180,17 @@ module.exports = {
                     return Promise.reject(new Error(error_messages.no_account))
                 }
                 else {
-                    const msg = "Welcome, " + role + " " + data[0].first_name + " " + data[0].last_name
-                    res.status(200).send({success: {message:msg}})
+                    // const msg = "Welcome, " + role + " " + data[0].first_name + " " + data[0].last_name
+                    delete data[0].password
+                    // req.session.user = data[0]
+                    // req.session.save()
+                    res.status(200).send({user: data[0]})
                     return Promise.resolve()
                 }
             }).catch((err) => {
                 console.log(err)
                 if(err.message === error_messages.no_account) {
-                    res.status(401).send({error: {statusCode:401, message: err.message, errorCode: 1}})
+                    res.status(400).send({error: {statusCode:400, message: err.message, errorCode: 1}})
                 }
                 else {
                     res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 1}})
@@ -185,6 +200,42 @@ module.exports = {
         catch(err) {
             console.log(err)
             res.status(400).send({error: {statusCode:400, message: err.message, errorCode: 1}})
+        }
+    },
+
+    editAccount: (req, res, next) => {
+        try {
+            if(!helper.validateEmail(req.body.email)) {
+                throw new Error(error_messages.email)
+            }
+            if(req.body.password.length < 8) {
+                throw new Error(error_messages.password)
+            }
+            let role = req.query.role || "seeker"
+            if(role != "seeker" && role != "employer") {
+                role = "seeker"
+            }
+            console.log(role)
+            repo.editAccount(role, req.params.id, req.body).then(() => {
+                res.status(200).send({success: {message: "Account edit successful!"}})
+            }).catch((err) => {
+                console.error(err)
+                res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error: {statusCode: 400, message: err.message, errorCode: 1000}})
+        }
+    },
+
+    checkLogin: (req, res, next) => {
+        try {
+            req.session.user ? res.status(200).send({loggedIn:true}) : res.status(200).send({loggedIn: false})
+        }
+        catch(err) {
+            console.error(err)
+            res.status(500).send({statusCode: 500, message:error_messages.server, errorCode: 5000})
         }
     },
 
@@ -207,13 +258,13 @@ module.exports = {
                     }
                 }).then(() => {
                     const msg = role + " " + req.params.id + " deleted!"
-                    res.send({success: {message: msg}})
+                    res.send({success: {statusCode: 200, message: msg}})
                 }).catch((e) => {
                     console.log(err)
                     if(err.message = error_messages.no_existing) {
-                        res.send({error:{statusCode:401, message:err.message, errorCode: 1}})
+                        res.status(401).send({error:{statusCode:401, message:err.message, errorCode: 1}})
                     }
-                    res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                    res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
                 })
             }
 
@@ -228,61 +279,130 @@ module.exports = {
                     }
                 }).then(() => {
                     const msg = role + " " + req.params.id + " deleted!"
-                    res.send({success: {message: msg}})
+                    res.send({success: {statusCode: 200, message: msg}})
                 }).catch((err) => {
                     console.log(err)
                     if(err.message = error_messages.no_existing) {
-                        res.send({error:{statusCode:401, message:err.message, errorCode: 1}})
+                        res.status(401).send({error:{statusCode:401, message:err.message, errorCode: 1}})
                     }
                     else {
-                        res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                        res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
                     }
                 })
             }
         }
         catch(err) {
             console.log(err)
-            res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+            res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
         }
     },
 
     //get all users
     getAllUsers: (req, res, next) => {
-        Promise.all([repo.getAllSeekers(), repo.getAllEmployers()])
-               .then((results) => {
-                 res.send(results)
-                })
-               .catch((e) => {
-                res.send("Error connecting to database")
-                })
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            Promise.all([repo.getAllSeekers(), repo.getAllEmployers()]).then((data) => {
+                res.status(200).send({success: {statusCode: 200, data: data}})
+            }).catch((err) => {
+                console.log(err)
+                res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error:{statusCode:400, message:error_messages.bad_id, errorCode: 1}})
+        }
     },
 
     //get seeker account
     getSeeker: (req, res, next) => {
-        repo.getSeekerById(req.params.id).then((data) => {
-            res.send(data)
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            repo.getSeekerById(req.params.id).then((data) => {
+                if(data.length === 0) {
+                //1104 no account employer
+                    return Promise.reject(new Error(1104))
+                }
+                else {
+                    res.status(200).send({data: data[0]})
+                }
+            }).catch((err) => {
+                console.log(err)
+                if(err.message === 1004) {
+                    res.status(404).send({error:{statusCode:404, message:error_messages.no_existing, errorCode: 1104}})
+                }
+                else {
+                    res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
+                }
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error:{statusCode:400, message:error_messages.bad_id, errorCode: 1}})
+        }
+    },
+
+    //get seeker account
+    getSeekerByEmail: (req, res, next) => {
+        repo.getSeekerByEmail(req.body.email).then((data) => {
+            if(data.length === 0) {
+            //1104 no account employer
+                return Promise.reject(new Error(1104))
+            }
+            else {
+                delete data[0].password
+                res.status(200).send({data: data[0]})
+            }
         }).catch((err) => {
             console.log(err)
-            res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+            if(err.message === 1004) {
+                res.status(404).send({error:{statusCode:404, message:error_messages.no_existing, errorCode: 1104}})
+            }
+            else {
+                res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
+            }
         })
     },
 
     //get employer account
     getEmployer: (req, res, next) => {
         try {
+            // let id = 0
+            // if(!req.session.user || req.session.user.role != "employer") {
+            //     throw new Error("not logged in")
+            // }
+            // else {
+            //     id = req.session.user.user_id
+            // }
+            const id = req.params.id
             // if(!req.params.id || typeof(req.params.id) != "number") {
             //     throw new Error(error_messages.bad_id)
-            // }
-            repo.getEmployerById(req.params.id).then((data) => {
-                res.send(data)
-            }).catch((e) => {
+            // 
+            repo.getEmployerById(id).then((data) => {
+                if(data.length === 0) {
+                //1104 no account employer
+                    return Promise.reject(new Error(1104))
+                }
+                else {
+                    res.status(200).send({data: data[0]})
+                }
+            }).catch((err) => {
                 console.log(err)
-                res.send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                if(err.message === 1004) {
+                    res.status(404).send({error:{statusCode:404, message:error_messages.no_existing, errorCode: 1104}})
+                }
+                else {
+                    res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
+                }
             })
         }
         catch(err) {
             console.log(err)
-            res.send({error:{statusCode:400, message:error_messages.bad_id, errorCode: 1}})
+            res.status(403).send({error:{statusCode:403, message:error_messages.bad_id, errorCode: 1}})
         }
     },
 
@@ -293,66 +413,41 @@ module.exports = {
             //     throw new Error(error_messages.bad_id)
             // }
             //check if jobseeker exists
+            console.log(req.body)
             repo.getSeekerById(req.params.id).then((data) => {
                 if(data.length === 0) {
                     return Promise.reject(new Error(error_messages.no_existing))
                 }
                 else {
-                    return repo.editSeekerProfile(req.params.id)
+                    return repo.editSeekerProfile(req.params.id, req.body)
                 }
             }).then(() => {
-                res.send({success:{message: "Jobseeker Profile Updated!"}})
-            }).catch((err) => {
-                console.log(err)
-                res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
-            })
-        }
-        catch(err) {
-            console.log(err)
-            res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
-        }
-    },
-
-    editSeekerTags: (req, res, next) => {
-        try {
-            // if(!req.params.id || typeof(req.params.id) != "number") {
-            //     throw new Error(error_messages.bad_id)
-            // }
-            repo.getSeekerById(req.params.id).then((data) => {
-                if(data.length === 0) {
-                    return Promise.reject(new Error(error_messages.no_existing))
-                }
-                else {
-                    return repo.delSeekerTags(req.params.id)
-                }
+                return repo.delSeekerTags(req.params.id)
             }).then(() => {
-                let tags = JSON.parse(req.body.tags)
+                const tags = req.body.tags
                 return Promise.all(tags.map((tag) => {
                     repo.addSeekerTags(req.params.id, tag)
                 }))
             }).then(() => {
-                res.send({success:{message: "Jobseeker Tags Updated!"}})
+                res.status(200).send({success:{statusCode:200, message: "Jobseeker Profile Updated!"}})
             }).catch((err) => {
                 console.log(err)
-                res.send({error:{statusCode:500, message: error_messages.server, errorCode: 1}})
+                res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
             })
         }
         catch(err) {
             console.log(err)
-            if(err.message === error_messages.no_existing) {
-                res.send({error:{statusCode:500, message:err.message, errorCode: 1}})
-            }
-            res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+            res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
         }
     },
 
     //edit company profile (main recruiter only)
     editCompanyProfile: (req, res, next) => {
         try {
-            if(!helper.validateInt(req.body.establish)) {
+            if(req.body.establishment_date && !helper.validateInt(req.body.establishment_date)) {
                 throw new Error(error_messages.bad_date)
             }
-            if(!req.body.company) {
+            if(!req.body.name) {
                 throw new Error(error_messages.company)
             }
             repo.getEmployerById(req.params.id).then((results) => {
@@ -374,381 +469,403 @@ module.exports = {
             }).catch((err) => {
                 console.log(err)
                 if(err.message === error_messages.no_existing || err.message === error_messages.no_company) {
-                    res.status(401).send({error:{statusCode:401, message:err.message, errorCode: 1}})
+                    res.status(404).send({error:{statusCode:404, message:err.message, errorCode: 1104}})
                 }
                 else {
-                    res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+                    res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 5000}})
                 }
             })
         }
         catch(err) {
             console.log(err)
-            res.status(400).send({error:{statusCode:400, message:err.message, errorCode: 1}})
+            res.status(400).send({error:{statusCode:400, message:err.message, errorCode: 4000}})
         }
     },
 
     //get company profile
     getCompanyProfile: (req, res, next) => {
-        repo.getCompanyProfile(req.params.id).then((data) => {
-            if(data.length  === 0) {
-                res.send("Company not registered")
-            }
-            else {
-                res.send(data)
-            }
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
-        })
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            repo.getCompanyById(req.params.id).then((data) => {
+                if(data.length === 0) {
+                    res.status(404).send({error: {statusCode: 404, message:error_messages.no_company, errorCode: 1104}})
+                }
+                else {
+                    res.status(200).send({success: {statusCode:200, data: data[0]}})
+                }
+            }).catch((err) => {
+                console.log(err)
+                res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error:{statusCode:400, message:error_messages.bad_id, errorCode: 4000}})
+        }
     },
 
     //get all companies
     getAllCompanies: (req, res, next) => {
-        repo.getAllCompanies().then((data) => {
-            res.send(data)
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
-        })
+        try {
+            // if(!req.params.id || typeof(req.params.id) != "number") {
+            //     throw new Error(error_messages.bad_id)
+            // }
+            repo.getAllCompanies().then((data) => {
+                if(data.length === 0) {
+                    res.status(404).send({error: {statusCode: 404, message:error_messages.no_company, errorCode: 1104}})
+                }
+                else {
+                    res.status(200).send({success: {statusCode:200, data: data}})
+                }
+            }).catch((err) => {
+                console.log(err)
+                res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
+            })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(500).send({error:{statusCode:400, message:error_messages.bad_id, errorCode: 5000}})
+        }
     },
 
     //create job post
     createJobPost: (req, res, next) => {
+        let id = 0
         try {
-            if(!req.body.jobname || !req.body.recruiter || !req.body.company || !req.body.deadline) {
+            // if(!req.session.user || req.session.user.role != "employer") {
+            //     throw new Error("not logged in")
+            // }
+            // else {
+            //     id = req.session.user.user_id
+            // }
+            const id = req.body.posted_by_id
+
+            if(!req.body.job_name || !req.body.company_name || !req.body.date_deadline) {
                 throw new Error(error_messages.required)
             }
-            if(!helper.validateInt(req.body.post) || !helper.validateInt(req.body.deadline)) {
+            if(!helper.validateInt(req.body.date_posted) || !helper.validateInt(req.body.date_deadline)) {
                 throw new Error(error_messages.bad_date)
             }
             //check if employer
-            repo.getEmployerById(req.body.recruiter).then((results) => {
+            repo.getEmployerById(id).then((results) => {
                 if(results.length === 0) {
                     return Promise.reject(new Error(error_messages.no_existing))
                 }
                 else {
-                    return repo.createJobPost(req.body)
+                    return repo.createJobPost(id, req.body)
                 }
+            }).then((data) => {
+                const tags = req.body.tags
+                return Promise.all(tags.map((tag) => {
+                    repo.addJobTags(data, req.body.posted_by_id, tag)
+                }))
             }).then(() => {
                 res.status(200).send({success: {statusCode:200, message: "Job Post Created!"}})
             }).catch((err) => {
                 console.log(err)
                 if(err.message === error_messages.no_existing) {
-                    res.send({error: {statusCode:401, message:err.message, errorCode: 1}})
+                    res.status(404).send({error: {statusCode:404, message:err.message, errorCode: 1104}})
                 }
                 else {
-                    res.send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+                    res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 5000}})
                 }
             })
         }
         catch(err) {
             console.log(err)
-            res.status(400).send({error: {statusCode:400, message:err.message, errorCode: 1}})
+            res.status(400).send({error: {statusCode:400, message:err.message, errorCode: 4000}})
         }
-    },
-    
-    // //create job post
-    // createJobPost: (req, res, next) => {
-    //     if(!req.body.jobname || !req.body.recruiter || !req.body.company) {
-    //         res.send("REQUIRED FIELDS NULL")
-    //         return Promise.resolve()
-    //     }
-    //     //check if employer
-    //     Promise.all([repo.getEmployer(req.body.recruiter).then((results) => {
-    //                     if(results.length === 0) {
-    //                         return Promise.reject(new Error("user not registered"))
-    //                     }
-    //                     else {
-    //                         return Promise.resolve()
-    //                     }
-    //                 }), repo.getCompanyAccount(req.body.company).then((results) => {
-    //                     if(results.length === 0) {
-    //                         return Promise.reject(new Error("company not registered"))
-    //                     }
-    //                     else {
-    //                         return Promise.resolve()
-    //                     }
-    //                 })
-    //     ]).then(() => {
-    //         return repo.createJobPost(req.body)
-    //     })
-    //     .then(() => {
-    //         // res.writeHead(200, '{Content-Type: text/plain}')
-    //         res.send("Job Post for " + req.body.jobname + " in " + req.body.company + " has been posted!")
-    //     })
-    //     .catch((e) => {
-    //         console.log(e)
-    //         // res.writeHead(404)
-    //         res.send("Account not registered")
-    //     })
-    // },
-    
-    //edit job credentials
-    editJobTags: (req, res, next) => {
-        let tags = JSON.parse(req.body.tags)
-        let flag = false
-        _.forEach(tags, (tag) => {
-            if(!tag.tag || !tag.type) {
-                res.send("incomplete fields")
-                flag = true
-            }
-        })
-        if(flag) {
-            console.log("incomplete fields")
-            return false
-        }
-        Promise.all([
-            repo.getEmployer(req.body.recruiter).then((results) => {
-                if(results.length === 0) {
-                    res.send("User not registered")
-                    return Promise.reject(new Error("user not registered"))
-                }
-                else {
-                    return Promise.resolve()
-                }
-            }),
-            repo.getJobByEmployer(req.params.id, req.body.recruiter).then((results) => {
-                if(results.length === 0) {
-                    res.send("Job not posted")
-                    return Promise.reject(new Error("job not posted"))
-                }
-                else {
-                    return Promise.resolve()
-                }
-            })
-        ]).then(() => {
-            return repo.delJobTags(req.params.id)
-        }).then(() => {
-            return Promise.all(JSON.parse(req.body.tags).map((tag) => {
-                repo.addJobTags(req.params.id, req.body.recruiter, tag)
-            }))
-        }).then(() => {
-            res.send("Job Post Credentials Updated!")
-        }).catch((e) => {
-            console.log(e.message)
-        })
     },
 
     //edit job post
     editJobPost: (req, res, next) => {
-        if(!req.body.jobname) {
-            res.send("REQUIRED FIELDS NULL")
-            return Promise.resolve()
-        }
-        Promise.all([
-            repo.getEmployer(req.body.recruiter).then((results) => {
-                if(results.length === 0) {
-                    res.send("User not registered")
-                    return Promise.reject(new Error("user not registered"))
+        try {
+            // let id = 0
+            // if(!req.session.user || req.session.user.role != "employer") {
+            //     throw new Error("not logged in")
+            // }
+            // else {
+            //     id = req.session.user.user_id
+            // }
+            // const id = req.query.posted_by_id
+            if(!req.body.job_name || !req.body.date_deadline) {
+                throw new Error(error_messages.required)
+            }
+            if(!helper.validateInt(req.body.date_deadline)) {
+                throw new Error(error_messages.bad_date)
+            }
+            //check if employer
+            repo.editJobPost(req.params.id, req.body).then(() => {
+                return repo.delJobTags(req.params.id)
+            }).then(() => {
+                const tags = req.body.tags
+                return Promise.all(tags.map((tag) => {
+                    repo.addJobTags(req.params.id, req.body.posted_by_id, tag)
+                }))
+            }).then(() => {
+                res.status(200).send({message: "Job Post Updated!"})
+            }).catch((err) => {
+                console.log(err)
+                if(err.message === error_messages.no_existing) {
+                    res.status(404).send({error: {statusCode:404, message:err.message, errorCode: 1204}})
                 }
                 else {
-                    return Promise.resolve()
+                    res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 5000}})
                 }
-            }).catch((e) => {
-                console.log(e.message)
-            }),
-            repo.getJobByEmployer(req.params.id, req.body.recruiter).then((results) => {
-                if(results.length === 0) {
-                    res.send("Job not posted")
-                    return Promise.reject(new Error("job not posted"))
-                }
-                else {
-                    return Promise.resolve()
-                }
-            }).catch((e) => {
-                console.log(e.message)
             })
-        ]).then(() => {
-            return repo.editJobPost(Number(req.params.id), req.body)
-        })
-        .then(() => {
-            // res.writeHead(200, '{Content-Type: text/plain}')
-            res.send("Job Post for " + req.body.jobname + " in " + req.body.company + " updated!")
-        })
-        .catch((e) => {
-            console.log(e)
-            // res.writeHead(404)
-            res.send("Error connecting to database")
-        })
+        }
+        catch(err) {
+            console.log(err)
+            res.status(400).send({error: {statusCode:400, data: req.body, message:err.message, errorCode: 4000}})
+        }
     },
 
     //delete job post
     delJobPost: (req, res, next) => {
-        Promise.all([
-            repo.getEmployer(req.body.recruiter).then((results) => {
-                if(results.length === 0) {
-                    res.send("User not registered")
-                    return Promise.reject(new Error("user not registered"))
+        try {
+            // repo.getEmployerById(req.body.posted_by_id).then((results) => {
+            //     if(results.length === 0) {
+            //         return Promise.reject(new Error(error_messages.no_existing))
+            //     }
+            //     else {
+            //         return 
+            //     }
+            // })
+            repo.delJobPost(req.params.id).then(() => {
+                return repo.delJobTags(req.params.id)
+            }).then(() => {
+                return repo.delApplications(req.params.id)
+            }).then(() => {
+                res.status(200).send({success: {statusCode:200, message:"Job Post deleted!"}})
+            }).catch((err) => {
+                console.error(err)
+                if(err.message === error_messages.no_existing) {
+                    res.status(404).send({error:{statusCode:404, message: error_messages.no_existing, errorCode: 1204}})
                 }
                 else {
-                    return Promise.resolve()
-                }
-            }),
-            repo.getJobByEmployer(req.params.id, req.body.recruiter).then((results) => {
-                if(results.length === 0) {
-                    res.send("Job not posted")
-                    return Promise.reject(new Error("job not posted"))
-                }
-                else {
-                    return Promise.resolve()
+                    res.status(500).send({error:{statusCode:500, message: error_messages.server, errorCode: 5000}})
                 }
             })
-        ]).then(() => {
-            return repo.delJobTags(req.params.id)
-        }).then(() => {
-            return repo.delJobPost(req.params.id)
-        }).then(() => {
-            // res.writeHead(200, '{Content-Type: text/plain}')
-            res.send("Job Post for " + req.body.jobname + " in " + req.body.company + " deleted!")
-        }).catch((e) => {
-            console.log(e)
-            // res.writeHead(404)
-        })
-    },
-
-    //view jobs you posted
-    getJobListEmployer: (req, res, next) => {
-        //check if employer
-        repo.getEmployer(req.body.id).then((results) => {
-            if(results.length === 0) {
-                res.send("User not registered")
-                return Promise.reject(new Error("user not registered"))
-            }
-            else {
-                return Promise.resolve()
-            }
-        }).then(() => {
-            return repo.getJobListByPoster(req.body.id)
-        }).then((data) => {
-            if(data.length === 0) {
-                res.send("No jobs posted")
-                return Promise.reject(new Error("no jobs posted"))
-            }
-            res.send(data[0])
-        }).catch((e) => {
-            console.log(e.message)
-        })
+        }
+        catch(err) {
+            console.error(err)
+            res.status(500).send({error:{statusCode:500, message: error_messages.server, errorCode: 500}})
+        }
     },
 
     //view all jobs
     getJobList: (req, res, next) => {
         repo.getJobList().then((data) => {
-            res.send(data[0])
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
+            if(data.length === 0) {
+                res.status(200).send({data: {count: 0}})
+            }
+            else {
+                
+                res.status(200).send({data: data})
+            }
+        }).catch((err) => {
+            console.log(err)
+            res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 1}})
         })
     },
 
     //view job post
-    getJobInfo: (req, res, next) => {
-        Promise.all([repo.getJobPost(req.params.id),
-                    repo.getJobTags(req.params.id)])
-                .then((results) => {
-                    res.send(results)
-                }).catch((e) => {
-                    console.log(e.message)
-                    res.send("Error connecting to database")
-                })
+    getJobById: (req, res, next) => {
+        let payload = {}
+        repo.getJobById(req.params.id).then((data) => {
+            if(data.length === 0) {
+                res.status(404).send({error: {statusCode: 404, message: "job not posted", errorCode: 1}})
+            }
+            else {
+                payload = data[0]
+                return repo.getJobTags(req.params.id)
+            }
+        }).then((data) => {
+            payload.tags = data
+            res.status(200).send({data: payload})
+        }).catch((err) => {
+            console.log(err)
+            res.send({error:{statusCode: 500, message: error_messages.server, errorCode: 1}})
+        })
     },
 
     //recommended jobs
     getRecommendedJobs: (req, res, next) => {
-        //check if jobseeker
-        repo.getSeeker(req.params.id).then((data) => {
+        const order = orders.includes(req.query.order) ? req.query.order : 'date_posted'
+        const how = req.query.how==='asc' ? 'asc' : 'desc'
+        if(req.params.id < 0) {
+            //error 4000 = bad request
+            throw Error(4000)
+        }
+        if(req.params.id === 0) req.params.id = 1
+        const limit = req.query.limit || 20
+        const start = limit * (req.params.page - 1) || 0
+        let counts = []
+        let total = 0
+        repo.getSeekerById(req.params.id).then((data) => {
             if(data.length === 0) {
-                res.send("USER NOT IN DATABASE")
-                return Promise.reject()
+                return Promise.reject(new Error(error_messages.no_match))
             }
             else {
                 return Promise.resolve()
             }
         }).then(() => {
-                return repo.getMatchingTags(req.params.id)
+                return repo.getMatchingTags(req.params.id, start, limit)
         }).then((results) => {
-            if(counts.length === 0) {
-                res.send("no matching jobs found")
-                return Promise.resolve()
+            console.log(results)
+            total = results[0].length
+            for(let i = 0; i < results[0].length; i++) {
+                counts.push(results[0][i].match_count)
+            }
+            if(results.length === 0) {
+                return Promise.reject(new Error(error_messages.no_match))
             }
 
             Promise.all(results[0].map((key) => {
-                        return repo.getJobsbyId(Number(key.job_id))
+                        return repo.getJobById(Number(key.job_id))
                     }))
                     .then((results) => {
                         console.log(results)
-                        res.send(results)
+                        const jobs = []
+                        for(let i = 0; i < results.length; i++){
+                            results[i][0].count = counts[i]
+                            jobs.push(results[i][0])
+                        }
+                        res.status(200).send({data:{count: total, jobs: jobs}})
                     })
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
+        }).catch((err) => {
+            console.log(err)
+            if(err.message === error_messages.no_match) {
+                //1205 - no matching jobs
+                res.status(404).send({error: {statusCode: 404, message: error_messages.no_match, errorCode: 1205}})
+            }
+            else {
+                res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+            }
         })
     },
 
     //apply for job
     applyForJob: (req, res, next) => {
         //check if jobseeker
-        repo.getSeeker(req.params.id).then((data) => {
+        repo.getSeekerById(req.body.user_id).then((data) => {
             if(data.length === 0) {
-                res.send("USER NOT IN DATABASE")
-                return Promise.resolve()
+                return Promise.reject(new Error(error_messages.no_existing))
             }}).then(() => {
                 return repo.getApplication(req.body).then((results) => {
                     if(results.length === 0) {
                         return Promise.resolve()
                     }
                     else {
-                        res.send("Already applied for job")
-                        return Promise.reject()
+                        return Promise.reject(new Error(error_messages.applied))
                     }
                 })
             }).then(() =>{
-                return repo.verifyJobStatus(req.body.jobId)
+                return repo.verifyJobStatus(req.body.job_id)
             }).then((results) => {
                 if(results.length === 0) {
-                    res.send("JOB POST DOES NOT EXIST")
-                    return Promise.resolve()
+                    return Promise.resolve(new Error(error_messages.no_job))
                 }
                 if(results.is_open === "yes" || 1) {
-                    repo.applyForJob(req.body).then(() => { 
-                        res.send("User " + req.body.userId + " applied for " + req.body.jobId)
+                    repo.applyForJob(req.body).then((results) => {
+                        const msg = "User " + req.body.userId + " applied for " + req.body.jobId
+                        res.status(200).send({app_id: results[0].insertId})
+                        return Promise.resolve()
                     })
                 }
                 else {
-                    res.send("No longer accepting applications")
-                    return Promise.resolve()
+                    return Promise.reject(new Error(error_messages.not_accepting))
                 }
             })
-            .catch((e) => {
-                console.log(e.message)
-                    res.send("Error connecting to database")
+            .catch((err) => {
+                console.log(err.message)
+                if(err.message === error_messages.no_job) {
+                    res.send({error: {statusCode: 403}})
+                }
+                else {
+                    res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                }
             })
+    },
+
+    delApplication: (req, res, next) => {
+        repo.getApplicationStatusById(req.params.id).then((results) => {
+            if(results[0].status==="pending") {
+                return repo.delApplication(req.params.id)
+            }
+            else {
+                res.status(403).send({error: {statusCode: 403, message: "cannot withdraw processed application", errorCode: 4003}})
+                return Promise.resolve("skip")
+            }
+        }).then((results) => {
+            if(results !== "skip") {
+                res.status(200).send({data: "Delete Success!"})
+            }
+        }).catch((err) => {
+            console.error(err)
+            res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
+        })
     },
 
     //view all applications
     getApplications: (req, res, next) => {
         //check if employer
         console.log(req.body.id)
-        repo.getEmployer(req.body.id).then((results) => {
+        // repo.getEmployerById(req.body.id).then((results) => {
+        //     if(results.length === 0) {
+        //         res.send("User not registered")
+        //         return Promise.reject(new Error("user not registered"))
+        //     }
+        //     else {
+        //         return Promise.resolve()
+        //     }
+        // }).then(() => {
+        //     return repo.getApplications(req.body.userId)
+        // }).
+        let payload = {}
+        let id = req.params.posted_by_id
+        let page = req.params.page
+        console.log(id)
+        if(!id || id < 0) {
+            //error 4000 = bad request
+            throw Error(4000)
+        }
+        const order = orders.includes(req.query.order) ? req.query.order : 'date_posted'
+        const how = req.query.how==='asc' ? 'asc' : 'desc'
+        if(page === 0) page = 1
+        const start = 10 * (page - 1) || 0
+        const limit = 10
+        repo.getApplicationCount(id).then((results) => {
             if(results.length === 0) {
-                res.send("User not registered")
-                return Promise.reject(new Error("user not registered"))
+                res.status(200).send({data: {count: 0}})
             }
             else {
-                return Promise.resolve()
+                payload.count = results[0][0].count
+                return repo.getApplicationsPerPage(order, how, start, limit, id)
             }
-        }).then(() => {
-            return repo.getApplications(req.body.userId)
         }).then((results) => {
+            payload.apps = results
+            res.status(200).send({data: payload})
+            return Promise.resolve()
+        }).catch((err) => {
+            console.error(err)
+            res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
+        })
+    },
+
+    getApplicationStatus: (req, res, next) => {
+        repo.verifyIfApplied(req.params).then((results) => {
             if(results.length === 0) {
-                res.send("no applications")
-                return Promise.resolve()
+                res.status(200).send({applied: 'no'})
             }
             else {
-                res.send(results)
+                res.status(200).send({app_id: results[0].app_id, applied: 'yes'})
             }
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
+        }).catch((err) => {
+            console.error(err)
+            res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
         })
     },
 
@@ -772,48 +889,234 @@ module.exports = {
     //view jobseeker applications
     getApplicationsSeeker: (req, res, next) => {
         //check if jobseeker
-        repo.getApplicationSeeker(req.params.id).then((results) => {
-            if(results.length === 0) {
-                res.send("you have not applied for a jobs")
-                return Promise.resolve()
+        let payload = {}
+        let id = req.params.user_id
+        let page = req.params.page
+        console.log(id)
+        if(!id || id < 0) {
+            //error 4000 = bad request
+            throw Error(4000)
+        }
+        const order = orders.includes(req.query.order) ? req.query.order : 'date_posted'
+        const how = req.query.how==='asc' ? 'asc' : 'desc'
+        if(page === 0) page = 1
+        const start = 20 * (page - 1) || 0
+        const limit = 20
+        repo.getApplicationCountSeeker(id).then((results) => {
+            
+            if(results.length === 0 || results[0][0].count === 0) {
+                res.status(200).send({data: {count: 0}})
+                return Promise.reject("no error")
             }
-        })
-        .catch((e)=> {
-            console.log(e)
-            res.send("Error connecting to database")
+            else {
+                payload.count = results[0][0].count
+                return repo.getApplicationsPerPageSeeker(order, how, start, limit, id)
+            }
+        }).then((results) => {
+            console.log(results)
+            payload.apps = results
+            res.status(200).send({data: payload})
+            return Promise.resolve()
+        }).catch((err) => {
+            if(err != "no error") {
+                console.log(err.message)
+                res.status(500).send("Error connecting to database")
+            }
         })
     },
 
     //change application status
     editApplicationStatus: (req, res, next) => {
-        if(!req.body.status) {
-            res.send("REQUIRED FIELDS NULL")
-            return
-        }
+        // if(!req.body.status) {
+        //     res.send("REQUIRED FIELDS NULL")
+        //     return
+        // }
         repo.editApplicationStatus(req.params.id, req.body).then(() => {
-            res.send("Application of " + req.body.userId + " for Job " + req.params.id + " updated!")
-        }).catch((e) => {
-            console.log(e.message)
-            res.send("Error connecting to database")
+            res.status(200).send({success: {job: req.params.id, data: req.body}})
+        }).catch((err) => {
+            console.log(err)
+            res.status(500).send({error:{statusCode:500, message: error_messages.server, errorCode: 5000}})
         })
     },
 
     //view jobseeker profile (lastname, firstname, email, profile, tags)
     getSeekerProfile: (req, res, next) => {
-        //check if employer
-        let role = req.query.role || "candidate"
-        if(req.query.role != "candidate" || req.query.role != "employer") {
-            res.send("role not recognized")
-            return
+        try {
+            let payload = {}
+            repo.getSeekerProfile(req.params.id).then((results) => {
+                payload = results[0] 
+                delete payload.password
+                if(req.query.tags==="true") {
+                    return repo.getSeekerTags(req.params.id)
+                }
+                else {
+                    console.log(payload)
+                    return Promise.resolve({tags: "notags"})
+                }
+            }).then((results) => {
+                if(results.tags != "notags") {
+                    payload.tags = results
+                }
+                res.status(200).send({data: payload})
+            })
+            .catch((err) => {
+                console.log(err)
+                res.status(500).send({error:{statusCode:500, message: error_messages.server, errorCode: 5000}})
+            })
         }
-        Promise.all([repo.getSeekerProfile(req.params.id),
-                     repo.getSeekerTags(req.params,id)])
-                .then((results) => {
-                    res.send(results)
-                })
-                .catch((e) => {
-                    console.log(e.message)
-                    res.send("Error connecting to database")
-                })
+        catch(err) {
+            console.log(err)
+            res.status(500).send({error:{statusCode:500, message: error_messages.server, errorCode: 5000}})
+        }
+    },
+
+    getJobsPerPage: (req, res, next) => {
+        try {
+            let payload = {}
+            const order = orders.includes(req.query.order) ? req.query.order : 'date_posted'
+            const how = req.query.how==='asc' ? 'asc' : 'desc'
+            if(req.params.id < 0) {
+                //error 4000 = bad request
+                throw Error(4000)
+            }
+            if(req.params.id === 0) req.params.id = 1
+            const limit = req.query.limit || 20
+            const start = limit * (req.params.id - 1) || 0
+            console.log(req.params)
+            repo.getJobCount().then((results) => {
+                if(results.length === 0) {
+                    res.status(200).send({data: {count: 0}})
+                    return Promise.reject("no error")
+                }
+                else {
+                    payload.count = results[0][0].count
+                    return repo.getJobsPerPage(order, how, start, limit)
+                }
+            }).then((results) => {
+                console.log(results)
+                if(results.length === 0) {
+                //error 1200 = no jobs found
+                //error 5000 = server error
+                    res.status(200).send({data: {count: 0}})
+                    return Promise.reject("no error")
+                }
+                else {
+                    payload.jobs = results
+                    res.status(200).send({data: payload})
+                }
+            }).catch((err) => {
+                console.error(err)
+                
+                if(err != "no error") {
+                    res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                }
+            })
+
+        }
+        catch(err) {
+            console.error(err)
+            if(err.message === 4000) {
+                res.status(400).send({error:{statusCode:400, message: error_messages.bad_page, errorCode: 4000}})
+            }
+            else {
+                res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+            }
+        }
+    },
+
+    getJobsPerPageEmployer: (req, res, next) => {
+        try {
+            // console.log(req.session.id)
+            let start = 0
+            let payload = {}
+            // let id = 0
+            const order = orders.includes(req.query.order) ? req.query.order : 'date_posted'
+            const how = req.query.how==='asc' ? 'asc' : 'desc'
+            const id = req.query.posted_by_id //TESTING ONLY
+            // if(!req.session.user || req.session.user.role != "employer") {
+            //     throw new Error("not logged in")
+            // }
+            // else {
+            //     id = req.session.user.user_id
+            // }
+            const limit = req.query.limit || 20
+            if(!req.params.id || req.params.id == 0) {
+                start = 0
+            }
+            else {
+                start = limit * (req.params.id - 1) || 0
+            }
+            
+            
+            repo.getJobCountEmployer(id).then((results) => {
+                if(results.length === 0) {
+                    res.status(200).send({data: {count: 0}})
+                    return Promise.reject("no error") 
+               }
+                else {
+                    payload.count = results[0][0].count
+                    return repo.getJobsPerPageEmployer(order, how, start, limit, id)
+                }
+            }).then((results) => {
+                if(results.length === 0) {
+                //error 1200 = no jobs found
+                //error 5000 = server error
+                    res.status(200).send({data: {count: 0}})
+                    return Promise.reject("no error")
+                }
+                else {
+                    payload.jobs = results
+                    res.status(200).send({data: payload})
+                }
+            }).catch((err) => {
+                console.error(err)
+                if(err != "no error") {
+                    res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                }
+            })
+
+        }
+        catch(err) {
+            console.error(err)
+            if(err.message === 4000) {
+                res.status(400).send({error:{statusCode:400, message: error_messages.bad_page, errorCode: 4000}})
+            }
+            else {
+                res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+            }
+        }
+    },
+
+    getJobCount: (req, res, next) => {
+        repo.getJobCount().then((results) => {
+            res.status(200).send({data: results[0][0]})
+        }).catch((err) => {
+            console.log(err)
+            res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 5000}})
+        })
+    },
+
+    getJobCountEmployer: (req, res, next) => {
+        console.log("YAY")
+        console.log(req.query)
+        const id = req.query.posted_by_id //TESTING ONLY
+        // console.log(req.session.id)
+        // let id = 0
+        // if(!req.session.user || req.session.user.role != "employer") {
+        //     throw new Error("not logged in")
+        // }
+        // else {
+        //     id = req.session.user.user_id
+        // }
+        repo.getJobCountEmployer(id).then((results) => {
+            res.status(200).send({data: results[0][0]})
+        }).catch((err) => {
+            console.log(err)
+            res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 5000}})
+        })
+    },
+
+    getOptions: (req, res, next) => {
+        res.status(200).send({data: helper.options})
     }
-}
+ }

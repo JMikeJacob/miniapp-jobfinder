@@ -7,8 +7,10 @@
   },
   "dependencies": {
     "cookie-parser": "~1.4.4",
+    "cors": "^2.8.5",
     "debug": "~2.6.9",
     "express": "~4.16.1",
+    "express-session": "^1.16.2",
     "knex": "^0.17.6",
     "lodash": "^4.17.11",
     "morgan": "~1.9.1",
