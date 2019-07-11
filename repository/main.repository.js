@@ -223,9 +223,9 @@ module.exports = {
                     .then((res) => {
                         const job_id = res[0].insertId
                         return Promise.all([
-                                    knex.raw("INSERT INTO job_tags VALUES(?,?,?,?)",
+                                    knex.raw("INSERT INTO job_tags VALUES(null, ?,?,?,?)",
                                         [job_id, id, data.type, "type"]),
-                                    knex.raw("INSERT INTO job_tags VALUES(?,?,?,?)", [
+                                    knex.raw("INSERT INTO job_tags VALUES(null, ?,?,?,?)", [
                                         job_id, id, data.level, "level"])
                                     ]).then(() =>{return Promise.resolve(job_id)})
                     })
@@ -246,7 +246,7 @@ module.exports = {
     },
 
     addJobTags: (jobId, userId, data) => {
-        return knex.raw("INSERT INTO job_tags VALUES(?,?,?,?)",
+        return knex.raw("INSERT INTO job_tags VALUES(null, ?,?,?,?)",
                          [jobId, userId, data.tag, data.tag_type]).then(null,console.log)
     },
 
