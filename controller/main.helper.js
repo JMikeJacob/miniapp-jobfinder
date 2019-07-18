@@ -19,6 +19,23 @@ module.exports = {
         return re.test(String(str).toLowerCase())
     },
 
+    stringifyTags: (tags) => {
+        let convert = "["
+        for(let i  = 0; i < tags.length; i++) {
+            convert += "{\"tag\":"
+            convert += '"' + tags[i].tag + '"'
+            convert += ", \"tag_type\":"
+            convert += '"' + tags[i].tag_type + '"'
+            convert += "}"
+            if(i < tags.length - 1) {
+                convert += ","
+            }
+        }
+        convert += "]"
+
+        return convert
+    },
+
     options: {
         levels: [
             'Internship / OJT',
@@ -83,6 +100,17 @@ module.exports = {
             'Male',
             'Female',
             'Other'
+        ],
+
+        image_exts: [
+            'jpeg',
+            'png'
+        ],
+
+        resume_exts: [
+            'pdf',
+            'docx',
+            'doc'
         ]
     }
 }

@@ -3,6 +3,25 @@ const _ = require('lodash')
 const session = require('express-session')
 const helper = require('./main.helper')
 
+//AWS S3
+const AWS = require('aws-sdk')
+const s3 = new AWS.S3()
+
+const multer = require('multer')
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, '../public/images/')
+    },
+    filename: function (req, file, cb) {
+      cb(null, file.fieldname + '-' + Date.now() + file.fieldname.split('.')[file.fieldname.length-1])
+    }
+  })
+
+const upload = multer({
+    dest: '../public/images/',
+    storage: storage
+})
+
 const error_messages = {
     registered: "Email already registered!",
     server: "Something went wrong in our server. Please try again after a while!",
@@ -20,7 +39,8 @@ const error_messages = {
     bad_page: "Invalid page number",
     no_match: "No matching jobs found",
     applied: "Already applied for job",
-    not_accepting: "No longer accepting applications for that job"
+    not_accepting: "No longer accepting applications for that job",
+    bad_format: "Invalid file format"
 }
 
 const orders = ['date_posted', 'job_name', 'company', 'salary']
@@ -87,9 +107,9 @@ module.exports = {
             if(role === "seeker") {
                 //check if account exists
                 repo.getSeekerByEmail(req.body.email).then((results) => {
-                    if(results.length === 0) {
+                    if(!results) {
                         //create new account
-                        return repo.createAccount(role, req.body)
+                        return repo.createAccountSeeker(req.body)
                     }
                     else {
                         //email already registered
@@ -118,7 +138,7 @@ module.exports = {
                     throw new Error(error_messages.contact)
                 }
                 repo.getEmployerByEmail(req.body.email).then((results) => {
-                    if(results.length === 0) {
+                    if(!results) {
                         //check if company exists
                         return repo.getCompanyByName(req.body.company)
                     }
@@ -127,9 +147,9 @@ module.exports = {
                         return Promise.reject(new Error(error_messages.registered))
                     }
                 }).then((results) => {
-                    if(results.length === 0) {
+                    if(!results) {
                         //create new account
-                        return repo.createAccount(role, req.body)
+                        return repo.createAccountEmployer(req.body)
                     }
                     else {
                         //company already registered
@@ -156,6 +176,13 @@ module.exports = {
         }
     },
 
+    getSeekerRedis: (req, res, next) => {
+        repo.getSeekerRedis(req.params.id).then((data) => {
+            delete data.password
+            res.status(200).send(data)
+        })
+    },
+
     //login account
     loginAccount: (req, res, next) => {
         try {
@@ -173,29 +200,82 @@ module.exports = {
             if(role != "seeker" && role != "employer") {
                 role = "seeker"
             }
-            repo.loginAccount(role, req.body).then((data) => {
-                console.log(data)
-                //check if no matches
-                if(data.length === 0) {
+            if(role==="seeker") {
+                repo.loginAccountSeekerRedis(req.body.email).then((data) => {
+                    if(data) { //in redis
+                        if(req.body.email === data.email && req.body.password === data.password) {
+                            console.log("in redis")
+                            delete data.password
+                            res.status(200).send({user:data})
+                            return Promise.resolve()
+                        }
+                    }
+                    console.log("not in redis")
                     return Promise.reject(new Error(error_messages.no_account))
-                }
-                else {
-                    // const msg = "Welcome, " + role + " " + data[0].first_name + " " + data[0].last_name
-                    delete data[0].password
-                    // req.session.user = data[0]
-                    // req.session.save()
-                    res.status(200).send({user: data[0]})
-                    return Promise.resolve()
-                }
-            }).catch((err) => {
-                console.log(err)
-                if(err.message === error_messages.no_account) {
-                    res.status(400).send({error: {statusCode:400, message: err.message, errorCode: 1}})
-                }
-                else {
-                    res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 1}})
-                }
-            })
+                    // return repo.loginAccountSeeker(req.body)
+                // }).then((data) => {
+                //     console.log(data)
+                //     //check if no matches
+                //     if(data.length === 0) {
+                //         return Promise.reject(new Error(error_messages.no_account))
+                //     }
+                //     else {
+                //         // const msg = "Welcome, " + role + " " + data[0].first_name + " " + data[0].last_name
+                //         delete data[0].password
+                //         // req.session.user = data[0]
+                //         // req.session.save()
+                //         res.status(200).send({user: data[0]})
+                //         return Promise.resolve()
+                //     }
+                }).catch((err) => {
+                    console.log(err)
+                    if(err.message === error_messages.no_account) {
+                        res.status(400).send({error: {statusCode:400, message: err.message, errorCode: 1}})
+                    }
+                    else {
+                        res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 1}})
+                    }
+                })
+                
+            }
+            else if(role === "employer") {
+                repo.loginAccountEmployerRedis(req.body.email).then((data) => {
+                    console.log(data)
+                    if(data) { //in redis
+                        if(req.body.email === data.email && req.body.password === data.password) {
+                            console.log("in redis")
+                            delete data.password
+                            res.status(200).send({user:data})
+                            return Promise.resolve()
+                        }
+                    }
+                    console.log("not in redis")
+                    return Promise.reject(new Error(error_messages.no_account))
+                    // return repo.loginAccountEmployer(req.body)
+                // }).then((data) => {
+                //     //check if no matches
+                //     if(data.length === 0) {
+                //         return Promise.reject(new Error(error_messages.no_account))
+                //     }
+                //     else {
+                //         // const msg = "Welcome, " + role + " " + data[0].first_name + " " + data[0].last_name
+                //         delete data[0].password
+                //         // req.session.user = data[0]
+                //         // req.session.save()
+                //         res.status(200).send({user: data[0]})
+                //         return Promise.resolve()
+                //     }
+                }).catch((err) => {
+                    console.log(err)
+                    if(err.message === error_messages.no_account) {
+                        res.status(400).send({error: {statusCode:400, message: err.message, errorCode: 1}})
+                    }
+                    else {
+                        res.status(500).send({error: {statusCode:500, message: error_messages.server, errorCode: 1}})
+                    }
+                })
+            }
+            
         }
         catch(err) {
             console.log(err)
@@ -215,13 +295,50 @@ module.exports = {
             if(role != "seeker" && role != "employer") {
                 role = "seeker"
             }
-            console.log(role)
-            repo.editAccount(role, req.params.id, req.body).then(() => {
-                res.status(200).send({success: {message: "Account edit successful!"}})
-            }).catch((err) => {
-                console.error(err)
-                res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
-            })
+            if(role === "seeker") { 
+                repo.getSeekerByEmail(req.body.email).then((data) => {
+                    if(data) {
+                        return repo.editAccountSeeker(req.params.id, req.body)
+                    }
+                    else {
+                        if(data === req.params.id) {
+                            return repo.editAccountSeeker(req.params.id, req.body)
+                        }
+                        //email already registered
+                        return Promise.reject(new Error(error_messages.registered))
+                    }
+                }).then(() => {
+                    res.status(200).send({success: {message: "Account edit successful!"}})
+                }).catch((err) => {
+                    console.error(err)
+                    if(err.message === error_messages.registered) {
+                        res.status(403).send({error: {statusCode: 403, message: error_messages.registered, errorCode: 1103}})
+                    }
+                    else {
+                        res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                    }
+                })
+            }
+            else if(role === "employer") { 
+                repo.getEmployerByEmail(req.body.email).then((results) => {
+                    if(!results) {
+                        //create new account
+                        return repo.editAccountEmployer(req.params.id, req.body)
+                    }
+                    else {
+                        if(results === req.params.id) {
+                            return repo.editAccountEmployer(req.params.id, req.body)
+                        }
+                        //company already registered
+                        return Promise.reject(new Error(error_messages.registered))
+                    }
+                }).then(() => {
+                    res.status(200).send({success: {message: "Account edit successful!"}})
+                }).catch((err) => {
+                    console.error(err)
+                    res.status(500).send({error: {statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                })
+            }
         }
         catch(err) {
             console.log(err)
@@ -249,22 +366,26 @@ module.exports = {
             }
             //check if jobseeker exists
             if(role === "seeker") {
+                console.log(req.params.id)
                 repo.getSeekerById(req.params.id).then((data) => {
                     if(data.length === 0) {
+                        console.log("AAAA")
                         return Promise.reject(new Error(error_messages.no_delete))
                     }
                     else { //delete account
-                        return repo.delAccount(role, req.params.id)
+                        return repo.delAccountSeeker(req.params.id)
                     }
                 }).then(() => {
                     const msg = role + " " + req.params.id + " deleted!"
                     res.send({success: {statusCode: 200, message: msg}})
-                }).catch((e) => {
+                }).catch((err) => {
                     console.log(err)
                     if(err.message = error_messages.no_existing) {
                         res.status(401).send({error:{statusCode:401, message:err.message, errorCode: 1}})
                     }
-                    res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                    else {
+                        res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 1}})
+                    }
                 })
             }
 
@@ -275,7 +396,7 @@ module.exports = {
                         return Promise.reject(new Error(error_messages.no_existing))
                     }
                     else { //delete account
-                        return repo.delAccount(role, req.params.id)
+                        return repo.delAccountEmployer(req.params.id)
                     }
                 }).then(() => {
                     const msg = role + " " + req.params.id + " deleted!"
@@ -322,9 +443,20 @@ module.exports = {
             // if(!req.params.id || typeof(req.params.id) != "number") {
             //     throw new Error(error_messages.bad_id)
             // }
-            repo.getSeekerById(req.params.id).then((data) => {
+            repo.getSeekerByIdRedis(req.params.id).then((data) => {
+                if(data) { //in redis
+                    if(req.params.id === data.user_id) {
+                        console.log("in redis")
+                        return Promise.resolve([data])
+                    }
+                    else {
+                        console.log("not in redis")
+                        return repo.getSeekerById(req.params.id)
+                    }
+                }
+            }).then((data) => {
                 if(data.length === 0) {
-                //1104 no account employer
+                //1104 no account seeker
                     return Promise.reject(new Error(1104))
                 }
                 else {
@@ -382,7 +514,18 @@ module.exports = {
             // if(!req.params.id || typeof(req.params.id) != "number") {
             //     throw new Error(error_messages.bad_id)
             // 
-            repo.getEmployerById(id).then((data) => {
+            repo.getEmployerByIdRedis(req.params.id).then((data) => {
+                if(data) { //in redis
+                    if(req.params.id === data.user_id) {
+                        console.log("in redis")
+                        return Promise.resolve([data])
+                    }
+                    else {
+                        console.log("not in redis")
+                        return repo.getEmployerById(req.params.id)
+                    }
+                }
+            }).then((data) => {
                 if(data.length === 0) {
                 //1104 no account employer
                     return Promise.reject(new Error(1104))
@@ -414,6 +557,8 @@ module.exports = {
             // }
             //check if jobseeker exists
             console.log(req.body)
+            let urlPic = ""
+            let urlResume = ""
             repo.getSeekerById(req.params.id).then((data) => {
                 if(data.length === 0) {
                     return Promise.reject(new Error(error_messages.no_existing))
@@ -422,17 +567,65 @@ module.exports = {
                     return repo.editSeekerProfile(req.params.id, req.body)
                 }
             }).then(() => {
+                if(req.body.pic_url && req.body.pic_url !=="") {
+                    const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    if(!helper.options.image_exts.includes(ext)) {
+                        return Promise.reject(error_messaes.bad_format)
+                    }
+                    urlPic = s3.getSignedUrl('putObject', {
+                        Bucket: "jobseeker-file-bucket", 
+                        Key: req.body.pic_url, 
+                        Expires: 60 * 2, 
+                        ACL: "bucket-owner-full-control",
+                        ContentType: "image/"+req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    })
+                    return repo.addSeekerPic(req.params.id, urlPic.split('?')[0])
+                }
+                else {
+                    return Promise.resolve()
+                }
+            }).then(() => {
+                if(req.body.resume_url && req.body.resume_url !=="") {
+                    let contenttype = ""
+                    const ext = req.body.resume_url.split('.')[req.body.resume_url.split('.').length-1]
+                    if(ext === "docx" || ext === "doc") {
+                        contenttype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    }
+                    else if(ext === "pdf") {
+                        contenttype = "application/pdf"
+                    }
+                    else {
+                        return Promise.reject(error_messages.bad_format)
+                    }
+                    urlResume = s3.getSignedUrl('putObject', {
+                        Bucket: "jobseeker-file-bucket", 
+                        Key: req.body.resume_url, 
+                        Expires: 60 * 2, 
+                        ACL: "bucket-owner-full-control",
+                        ContentType: contenttype
+                    })
+                    return repo.addSeekerResume(req.params.id, urlResume.split('?')[0])
+                }
+                else {
+                    return Promise.resolve()
+                }
+            }).then(() => {
                 return repo.delSeekerTags(req.params.id)
             }).then(() => {
                 const tags = req.body.tags
-                return Promise.all(tags.map((tag) => {
-                    repo.addSeekerTags(req.params.id, tag)
-                }))
+                const tags_str = helper.stringifyTags(tags)
+                return repo.addSeekerTags(req.params.id, tags, tags_str)
             }).then(() => {
-                res.status(200).send({success:{statusCode:200, message: "Jobseeker Profile Updated!"}})
+                res.status(200).send({success:{statusCode:200, url: urlPic, urlResume: urlResume}})
             }).catch((err) => {
                 console.log(err)
-                res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+                if(err.message === error_messages.bad_format) {
+                    //4110: BAD FILE FORMAT
+                    res.status(400).send({error:{statusCode:400, message:err.message, errorCode: 4110}})
+                }
+                else {
+                    res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+                }
             })
         }
         catch(err) {
@@ -444,32 +637,49 @@ module.exports = {
     //edit company profile (main recruiter only)
     editCompanyProfile: (req, res, next) => {
         try {
+            let url = ""
             if(req.body.establishment_date && !helper.validateInt(req.body.establishment_date)) {
                 throw new Error(error_messages.bad_date)
             }
             if(!req.body.name) {
                 throw new Error(error_messages.company)
             }
-            repo.getEmployerById(req.params.id).then((results) => {
-                if(results.length === 0) {
+            repo.getEmployerByIdRedis(req.params.id).then((results) => {
+                if(!results) {
                     return Promise.reject(new Error(error_messages.no_existing))
-                }
-                else {
-                    return repo.getCompanyById(req.params.id)
-                }
-            }).then((results) => {
-                if(results.length === 0) {
-                    return Promise.reject(new Error(error_messages.no_company))
                 }
                 else {
                     return repo.editCompanyProfile(req.params.id, req.body)
                 }
             }).then(() => {
-                res.status(200).send({success:{statusCode:200, message:"Company Profile Updated!"}})
+                console.log(req.body)
+                if(req.body.pic_url && req.body.pic_url !=="") {
+                    const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    if(!helper.options.image_exts.includes(ext)) {
+                        return Promise.reject(new Error(error_messages.bad_format))
+                    }
+                    url = s3.getSignedUrl('putObject', {
+                        Bucket: "jobseeker-file-bucket", 
+                        Key: req.body.pic_url, 
+                        Expires: 60 * 2, 
+                        ACL: "bucket-owner-full-control",
+                        ContentType: "image/"+req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    })
+                    return repo.addCompanyPic(req.params.id, url.split('?')[0])
+                }
+                else {
+                    return Promise.resolve()
+                }
+            }).then(() => {
+                res.status(200).send({success:{statusCode:200, url: url}})
             }).catch((err) => {
                 console.log(err)
                 if(err.message === error_messages.no_existing || err.message === error_messages.no_company) {
                     res.status(404).send({error:{statusCode:404, message:err.message, errorCode: 1104}})
+                }
+                else if(err.message === error_messages.bad_format) {
+                    //4110: BAD IMAGE FORMAT
+                    res.status(400).send({error:{statusCode:400, message:err.message, errorCode: 4110}})
                 }
                 else {
                     res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 5000}})
@@ -488,7 +698,16 @@ module.exports = {
             // if(!req.params.id || typeof(req.params.id) != "number") {
             //     throw new Error(error_messages.bad_id)
             // }
-            repo.getCompanyById(req.params.id).then((data) => {
+            repo.getCompanybyIdRedis(req.params.id).then((data) => {
+                if(data) {
+                    if(req.params.id === data.company_id) {
+                        console.log("in redis")
+                        return Promise.resolve([data])
+                    }
+                }
+                console.log("not in redis")
+                return repo.getCompanyById(req.params.id)
+            }).then((data) => {
                 if(data.length === 0) {
                     res.status(404).send({error: {statusCode: 404, message:error_messages.no_company, errorCode: 1104}})
                 }
@@ -558,9 +777,8 @@ module.exports = {
                 }
             }).then((data) => {
                 const tags = req.body.tags
-                return Promise.all(tags.map((tag) => {
-                    repo.addJobTags(data, req.body.posted_by_id, tag)
-                }))
+                const tags_str = helper.stringifyTags(tags)
+                return repo.addJobTags(data, req.body.posted_by_id, tags, tags_str)
             }).then(() => {
                 res.status(200).send({success: {statusCode:200, message: "Job Post Created!"}})
             }).catch((err) => {
@@ -601,9 +819,9 @@ module.exports = {
                 return repo.delJobTags(req.params.id)
             }).then(() => {
                 const tags = req.body.tags
-                return Promise.all(tags.map((tag) => {
-                    repo.addJobTags(req.params.id, req.body.posted_by_id, tag)
-                }))
+                const tags_str = helper.stringifyTags(req.body.tags)
+                console.log(tags)
+                repo.addJobTags(req.params.id, req.body.posted_by_id, tags, tags_str)
             }).then(() => {
                 res.status(200).send({message: "Job Post Updated!"})
             }).catch((err) => {
@@ -674,17 +892,32 @@ module.exports = {
     //view job post
     getJobById: (req, res, next) => {
         let payload = {}
-        repo.getJobById(req.params.id).then((data) => {
+        repo.getJobByIdRedis(req.params.id).then((data) => {
+            if(data) {
+                console.log(data)
+                if(req.params.id === data.job_id) {
+                    console.log("in redis")
+                    return Promise.resolve([data])
+                }
+            }
+            console.log("not in redis")
+            return repo.getJobById(req.params.id)})
+        .then((data) => {
             if(data.length === 0) {
                 res.status(404).send({error: {statusCode: 404, message: "job not posted", errorCode: 1}})
+                return Promise.resolve("nojob")
             }
             else {
                 payload = data[0]
                 return repo.getJobTags(req.params.id)
             }
         }).then((data) => {
-            payload.tags = data
-            res.status(200).send({data: payload})
+            if(data !== "nojob") {
+                console.log(data)
+                payload.tags = JSON.parse(data)
+                console.log(payload)
+                res.status(200).send({data: payload})
+            } 
         }).catch((err) => {
             console.log(err)
             res.send({error:{statusCode: 500, message: error_messages.server, errorCode: 1}})
@@ -943,7 +1176,16 @@ module.exports = {
     getSeekerProfile: (req, res, next) => {
         try {
             let payload = {}
-            repo.getSeekerProfile(req.params.id).then((results) => {
+            repo.getSeekerProfileRedis(req.params.id).then((results) => {
+                if(results) {
+                    if(req.params.id === results.user_id) {
+                        console.log("in redis")
+                        return Promise.resolve([results])
+                    }
+                }
+                console.log("not in redis")
+                return repo.getSeekerProfile(req.params.id)
+            }).then((results) => {
                 payload = results[0] 
                 delete payload.password
                 if(req.query.tags==="true") {
@@ -951,11 +1193,11 @@ module.exports = {
                 }
                 else {
                     console.log(payload)
-                    return Promise.resolve({tags: "notags"})
+                    return Promise.resolve("notags")
                 }
             }).then((results) => {
-                if(results.tags != "notags") {
-                    payload.tags = results
+                if(results !== "notags") {
+                    payload.tags = JSON.parse(results)
                 }
                 res.status(200).send({data: payload})
             })
@@ -1117,6 +1359,46 @@ module.exports = {
     },
 
     getOptions: (req, res, next) => {
-        res.status(200).send({data: helper.options})
+        const payload = {}
+        repo.getOptions().then((data) => {
+            payload.levels = data[0][1]
+            payload.types = data[1][1]
+            payload.skills = data[2][1]
+            payload.fields = data[3][1]
+            payload.educations = data[4][1]
+            payload.genders = data[5][1]
+
+            res.status(200).send({data: payload})
+        })
+    },
+
+    getAllRedis: (req, res, next) => {
+        repo.getAllRedis().then((results) => {
+            console.log(results)
+            res.status(200).send({data: results})
+        })
+    },
+
+    getRedisKey: (req, res, next) => {
+        repo.getRedisKey(req.params.key).then((data) => {
+            res.status(200).send({data: data})
+        })
+    },
+
+    postOptions: (req, res, next) => {
+        repo.postRedisOptions(helper.options).then(() => {
+            res.status(200).send({data: "Options uploaded!"})
+        })
+    },
+
+    getSignedUrl: (req, res, next) => {
+        const url = s3.getSignedUrl('putObject', {
+            Bucket: "jobseeker-file-bucket", 
+            Key: "download.jpeg", 
+            Expires: 60 * 2, 
+            ACL: "bucket-owner-full-control",
+            ContentType: "image/jpeg"
+        })
+        res.status(200).send({url: url})
     }
  }

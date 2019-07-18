@@ -8,106 +8,57 @@ router.get('/', function(req, res, next) {
   res.render('index', { title: 'Express' });
 });
 
-//create account
-router.post('/register', controller.createAccount)
-
-//login account
-router.post('/login', controller.loginAccount)
-
-//check if login
-router.get('/login', controller.checkLogin)
-
-//edit account
-router.put('/account/:id', controller.editAccount)
-
-//get seeker account
-router.get('/seeker/:id', controller.getSeeker)
-
-//get employer account
-router.get('/employer/:id', controller.getEmployer)
-
-//delete account
-router.delete('/delete/:id', controller.delAccount)
-
-//get all user accounts
+//User CRUD
+router.post('/register', controller.createAccount) //create account
+router.post('/login', controller.loginAccount) //login account
+router.get('/login', controller.checkLogin) //check login
+router.put('/account/:id', controller.editAccount) //edit account
+router.delete('/account/:id', controller.delAccount) //delete account
+router.get('/seeker/:id', controller.getSeeker) //get seeker account
+router.get('/employer/:id', controller.getEmployer) //get employer account
 router.get('/master', controller.getAllUsers)
 
-//get jobseeker profile
-router.get('/seeker/profile/:id', controller.getSeekerProfile)
+//Job Post 
+router.get('/jobs/all', controller.getJobList) //get list of all jobs
+router.get('/jobs/post/:id', controller.getJobById) //get job post by id ?=tags=true
+router.get('/jobs/page/:id/', controller.getJobsPerPage) //get jobs sorted per page
+router.get('/employer/jobs/page/:id', controller.getJobsPerPageEmployer) //get jobs sorted per page
+router.post('/employer/jobs/new', controller.createJobPost) //create job post
+router.put('/employer/jobs/:id', controller.editJobPost) //edit job post
+router.delete('/employer/jobs/:id', controller.delJobPost) //delete job post
 
-//edit jobseeker profile
-router.put('/seeker/profile/:id', controller.editSeekerProfile)
+//Jobseeker Profile
+router.get('/seeker/profile/:id', controller.getSeekerProfile) //get seeker profile
+router.get('/employer/applications/applicant/:id', controller.getSeekerProfile) //get seeker profile for employer
+router.put('/seeker/profile/:id', controller.editSeekerProfile) //edit seeker profile
 
-//edit jobseeker tags
-// router.put('/seeker/profile/:id/tags', controller.editSeekerTags)
+//Company Profile
+router.get('/company/:id', controller.getCompanyProfile) //get company profile
+router.put('/company/:id', controller.editCompanyProfile) //edit company profile
 
-//view job board
-router.get('/jobs/all', controller.getJobList)
+//Applications:Seeker
+router.post('/jobs/application/:id', controller.applyForJob) //apply for job
+router.get('/jobs/application/:job_id/:user_id', controller.getApplicationStatus) //check if applied
+router.get('/seeker/applications', controller.getApplicationsSeeker) //view all seeker's applications
+router.get('/seeker/:user_id/applications/:page', controller.getApplicationsSeeker) //view seeker's applications sorted per page
+router.delete('/jobs/application/:id', controller.delApplication) //delete application
 
-// view job post
-router.get('/jobs/post/:id', controller.getJobById)
+//Applications:Employer
+router.get('/employer/:posted_by_id/applications/:page', controller.getApplications) //view applications per page
+router.get('/employer/applications/:id', controller.getApplicationsForJob) //view applications for job
+router.put('/employer/applications/:id', controller.editApplicationStatus) //change app
 
-//apply for job
-router.post('/jobs/application/:id', controller.applyForJob)
+//Recommended Jobs
+router.get('/seeker/recommended/:id/:page', controller.getRecommendedJobs) //get jobs with matching tags
 
-//check if applied
-router.get('/jobs/application/:job_id/:user_id', controller.getApplicationStatus)
-
-//view pending applications
-router.get('/seeker/applications', controller.getApplicationsSeeker)
-
-//remove applications'
-router.delete('/jobs/application/:id', controller.delApplication)
-
-//get company profile
-router.get('/company/:id', controller.getCompanyProfile)
-
-//edit company profile
-router.put('/company/:id', controller.editCompanyProfile)
-
-//create job post
-router.post('/employer/jobs/new', controller.createJobPost)
-
-//edit job post
-router.put('/employer/jobs/:id', controller.editJobPost)
-
-//edit job post tags
-// router.post('/employer/jobs/:id/tags', controller.editJobTags)
-
-//view own job posts
-router.get('/employer/jobs/page/:id', controller.getJobsPerPageEmployer)
-
-//remove job post
-router.delete('/employer/jobs/:id', controller.delJobPost)
-
-//view own applications
-router.get('/seeker/:user_id/applications/:page', controller.getApplicationsSeeker)
-
-//view applications in own job posts
-router.get('/employer/:posted_by_id/applications/:page', controller.getApplications)
-
-//view applications in one job post
-router.get('/employer/applications/:id', controller.getApplicationsForJob)
-
-//edit application status
-router.put('/employer/applications/:id', controller.editApplicationStatus)
-
-//view jobseeker profile
-router.get('/employer/applications/applicant/:id', controller.getSeekerProfile)
-
-//get jobs by page
-router.get('/jobs/page/:id/', controller.getJobsPerPage)
-
-//get number of job posts
-router.get('/jobs/count', controller.getJobCount)
-
-//get number of posted jobs
-router.get('/employer/jobs/count', controller.getJobCountEmployer)
-
-//get recommended jobs
-router.get('/seeker/recommended/:id/:page', controller.getRecommendedJobs)
-
-//get options
+//Options
 router.get('/options', controller.getOptions)
+
+//Utilities
+router.get('/redis/master', controller.getAllRedis)
+router.get('/redis/:key', controller.getRedisKey)
+router.post('/redis/options', controller.postOptions)
+router.post('/aws/url', controller.getSignedUrl)
+// router.post('/image', controller.uploadImage, controller.testVideo)
 
 module.exports = router;
