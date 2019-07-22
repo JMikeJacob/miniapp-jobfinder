@@ -24,11 +24,8 @@ module.exports = {
         return knex.raw("INSERT INTO seeker_accounts VALUES(null,?,?,?,?,?)", 
                             [data.lastname, data.firstname, data.email, data.password, "seeker"])
                         .then((results) => { //initialize user profile
-                            return Promise.all([
-                                    knex.raw("INSERT INTO seeker_profile(user_id) VALUES(?)",
-                                     [results[0].insertId]),
-                                    knex.raw("INSERT INTO seeker_tags(user_id, tag, tag_type) VALUES(?,'','level')", [results[0].insertId])
-                                ]).then(() => {
+                            return knex.raw("INSERT INTO seeker_tags(user_id, tag, tag_type) VALUES(?,'','level')", [results[0].insertId])
+                            .then(() => {
                                     return redis.pipeline()
                                                 .hmset('seeker:'+results[0].insertId, {
                                                         'user_id': results[0].insertId,
@@ -43,7 +40,9 @@ module.exports = {
                                                         'salary_per_month': "",
                                                         'education': "",
                                                         'level': "",
-                                                        'pic_url': ""})
+                                                        'pic_url': "",
+                                                        'pic_url_old': "",
+                                                        'app_notifications': "0"})
                                                 .set(`seeker:email:${data.email}`, results[0].insertId)
                                                 .exec()
                                 })
@@ -54,36 +53,35 @@ module.exports = {
         return knex.raw("INSERT INTO recruiters VALUES(null,?,?,?,?,?,?,?)",
                             [data.email, data.password, data.company, data.lastname,
                              data.firstname, data.contact, "employer"])
-                        .then((results) => { //initialize user profile
-                        return knex.raw("INSERT INTO company_profile(company_id, name) VALUES(?, ?)",
-                                    [results[0].insertId, data.company])
-                            .then(() => {
-                            return redis.pipeline()
-                                        .hmset('employer:'+results[0].insertId, {
-                                                'user_id': results[0].insertId,
-                                                'email': data.email, 
-                                                'password': data.password, 
-                                                'last_name': data.lastname, 
-                                                'first_name': data.firstname, 
-                                                'company_name': data.company, 
-                                                'contact_no': data.contact,
-                                                'role': 'employer'})
-                                        .set(`employer:email:${data.email}`, results[0].insertId)
-                                        .hmset('company:'+results[0].insertId, {
-                                            'company_id': results[0].insertId,
-                                            'email': data.email,
-                                            'name': data.company,
-                                            'contact_no': data.contact,
-                                            'website': data.website,
-                                            'description': data.description,
-                                            'establishment_date': data.establishment_date,
-                                            'location': data.location,
-                                            'pic_url': "",
-                                            'resume_url': ""
-                                        })
-                                        .exec()
-                        })
-                    })
+                    .then((results) => { //initialize user profile
+                    return redis.pipeline()
+                                .hmset('employer:'+results[0].insertId, {
+                                        'user_id': results[0].insertId,
+                                        'email': data.email, 
+                                        'password': data.password, 
+                                        'last_name': data.lastname, 
+                                        'first_name': data.firstname, 
+                                        'company_name': data.company, 
+                                        'contact_no': data.contact,
+                                        'role': 'employer',
+                                        'app_notifications': "0"})
+                                .set(`employer:email:${data.email}`, results[0].insertId)
+                                .hmset('company:'+results[0].insertId, {
+                                    'company_id': results[0].insertId,
+                                    'email': data.email,
+                                    'name': data.company,
+                                    'contact_no': data.contact,
+                                    'website': data.website,
+                                    'description': data.description,
+                                    'establishment_date': data.establishment_date,
+                                    'location': data.location,
+                                    'pic_url': "",
+                                    'pic_url_old': "",
+                                    'resume_url': "",
+                                    'resume_url_old': ""
+                                })
+                                .exec()
+        })
     },
 
     //login account seeker
@@ -177,11 +175,7 @@ module.exports = {
                         })
                         .then(() => {
                             return knex.raw("DELETE FROM job_tags WHERE posted_by_id = ?", [userId])
-                        })
-                        .then(() => {
-                            return knex.raw("DELETE FROM company_profile WHERE company_id = ?", userId)
-                        })
-                        .then(() => {
+                        }).then(() => {
                             return redis.hget(`employer:${userId}`, 'email').then((email) => {
                                 return redis.pipeline()
                                             .del(`employer:email:${email}`)
@@ -189,11 +183,6 @@ module.exports = {
                                             .exec()
                             })
                         })
-    },
-
-    //getCompanyOfRecruiter
-    getCompanyOfRecruiter: (key) => {
-        return knex.raw("SELECT company_id FROM company_profile WHERE company_name = ?", [compId])
     },
 
     //get all accounts
@@ -269,38 +258,34 @@ module.exports = {
     },
 
     //get company account
-    getCompanyById: (data) => {
-        return knex.select('company_profile.company_id',
-                           'company_profile.name', 
-                           'company_profile.website', 
-                           'company_profile.description', 
-                           'company_profile.establishment_date', 
-                           'company_profile.location',
-                           'recruiters.email',
-                           'recruiters.contact_no')
-                    .from('company_profile')
-                    .join('recruiters', 'recruiters.user_id', '=', 'company_profile.company_id')
-                    .where({'company_profile.company_id':data})
-    },
+    // getCompanyById: (data) => {
+    //     return knex.select('company_profile.company_id',
+    //                        'company_profile.name', 
+    //                        'company_profile.website', 
+    //                        'company_profile.description', 
+    //                        'company_profile.establishment_date', 
+    //                        'company_profile.location',
+    //                        'recruiters.email',
+    //                        'recruiters.contact_no')
+    //                 .from('company_profile')
+    //                 .join('recruiters', 'recruiters.user_id', '=', 'company_profile.company_id')
+    //                 .where({'company_profile.company_id':data})
+    // },
 
     getCompanybyIdRedis: (data) => {
         return redis.hgetall(`company:${data}`)
     },
 
     //delete company profile
-    delCompanyProfile: (data) => {
-        return knex.raw("DELETE FROM recruiters WHERE company_name = ?", data)
-    },
+    // delCompanyProfile: (data) => {
+    //     return knex.raw("DELETE FROM recruiters WHERE company_name = ?", data)
+    // },
 
     //edit seeker profile **ADD EDUCATION, INTERESTS**
     editSeekerProfile: (key, data) => {
         console.log(data)
-        return knex.raw("UPDATE seeker_profile SET contact_no = ?, gender=?, birthdate=?, salary_per_month = ?, education=?, level=? WHERE user_id = ?", 
-                        [data.contact_no, data.gender, data.birthdate, data.salary_per_month, data.education, data.level, key])
-                    .then(() => {
-                        return knex.raw("UPDATE seeker_tags SET tag=? WHERE user_id = ? AND tag_type='level'",
-                            [data.level, key])
-                    })
+        return knex.raw("UPDATE seeker_tags SET tag=? WHERE user_id = ? AND tag_type='level'",
+                        [data.level, key])
                     .then(() => {
                         return redis.hmset(`seeker:${key}`, {
                             'contact_no': data.contact_no,
@@ -308,17 +293,21 @@ module.exports = {
                             'birthdate': data.birthdate,
                             'salary_per_month': data.salary_per_month,
                             'education': data.education,
-                            'level': data.level
+                            'level': data.level,      
                         })
                     })
     },
 
     addSeekerPic: (key, url) => {
-        return redis.hset(`seeker:${key}`, 'pic_url', url)
+        return redis.hget(`seeker:${key}`, 'pic_url').then((url_old) => {
+            return redis.hmset(`seeker:${key}`, {'pic_url': url, 'pic_url_old': url_old})
+        })
     },
 
     addSeekerResume: (key, url) => {
-        return redis.hset(`seeker:${key}`, 'resume_url', url)
+        return redis.hget(`seeker:${key}`, 'resume_url').then((url_old) => {
+            return redis.hmset(`seeker:${key}`, {'resume_url': url, 'resume_url_old': url_old})
+        })
     },
 
     //create seeker skill set
@@ -342,12 +331,8 @@ module.exports = {
 
     //edit company profile
     editCompanyProfile: (key, data) => {
-        return knex.raw("UPDATE company_profile SET name = ?, website = ?, description = ?, establishment_date = ?, location = ? WHERE company_id = ?", 
-                        [data.name, data.website, data.description, data.establishment_date, data.location, key])
-                    .then(() => {
-                        return knex.raw("UPDATE recruiters SET company_name = ?, contact_no = ? WHERE user_id = ?", 
-                        [data.name, data.contact_no, key])
-                    }).then(() => {
+        return knex.raw("UPDATE recruiters SET company_name = ?, contact_no = ? WHERE user_id = ?", 
+        [data.name, data.contact_no, key]).then(() => {
                         return redis.pipeline()
                                     .hmset(`employer:${key}`, {
                                             'company': data.name, 
@@ -365,23 +350,25 @@ module.exports = {
     },
 
     addCompanyPic: (key, url) => {
-        return redis.hset(`company:${key}`, 'pic_url', url)
+        return redis.hget(`company:${key}`, 'pic_url').then((url_old) => {
+            return redis.hmset(`company:${key}`, {'pic_url': url, 'pic_url_old': url_old})
+        })
     },
 
     //get company profile
-    getCompanyProfile: (data) => {
-        return knex.select('company_profile.company_id',
-                           'company_profile.name', 
-                           'company_profile.website', 
-                           'company_profile.description', 
-                           'company_profile.establishment_date', 
-                           'company_profile.location',
-                           'recruiters.email',
-                           'recruiters.contact_no')
-                    .from('company_profile')
-                    .join('recruiters', 'recruiters.user_id', '=', 'company_profile.company_id')
-                    .where({'company_profile.company_id':data})
-    },
+    // getCompanyProfile: (data) => {
+    //     return knex.select('company_profile.company_id',
+    //                        'company_profile.name', 
+    //                        'company_profile.website', 
+    //                        'company_profile.description', 
+    //                        'company_profile.establishment_date', 
+    //                        'company_profile.location',
+    //                        'recruiters.email',
+    //                        'recruiters.contact_no')
+    //                 .from('company_profile')
+    //                 .join('recruiters', 'recruiters.user_id', '=', 'company_profile.company_id')
+    //                 .where({'company_profile.company_id':data})
+    // },
 
     //get all companies
     getAllCompanies: () => {
@@ -390,9 +377,8 @@ module.exports = {
 
     //create job post
     createJobPost: (id, data) => {
-        return knex.raw("INSERT INTO job_post VALUES(null,?,?,?,?,?,?,?,?,?,?,?)",
-                        [data.job_name, data.company_name, data.type, data.level, id,
-                         data.job_location, data.description, data.qualifications, "yes", data.date_posted, data.date_deadline])
+        return knex.raw("INSERT INTO job_post VALUES(null,?,?,?,?,?,?)",
+                        [data.job_name, data.company_name, id, "yes", data.date_posted, data.date_deadline])
                     .then((res) => {
                         const job_id = res[0].insertId
                         return Promise.all([
@@ -421,8 +407,8 @@ module.exports = {
 
     //edit job post
     editJobPost: (jobId, data) => {
-        return knex.raw("UPDATE job_post SET job_name = ?, type = ?, level = ?, job_location = ?, description = ?, qualifications = ?, is_open = ?, date_deadline = ? WHERE job_id = ?", 
-                        [data.job_name, data.type, data.level, data.job_location, data.description, data.qualifications, data.is_open, data.date_deadline, jobId]).then(console.log, console.log)
+        return knex.raw("UPDATE job_post SET job_name = ?, is_open = ?, date_deadline = ? WHERE job_id = ?", 
+                        [data.job_name, data.is_open, data.date_deadline, jobId]).then(console.log, console.log)
                     .then(() => {
                         return Promise.all([
                                     knex.raw("UPDATE job_tags SET tag=? WHERE job_id = ? AND tag_type='type'",
@@ -548,6 +534,16 @@ module.exports = {
                          [data.user_id, data.job_id, data.posted_by_id, "pending", data.date_posted])
     },
 
+    getSocketId: (userId) => {
+        return redis.get(`employer:socketId:${userId}`)
+    },
+
+    incrementNotifCount: (userId) => {
+        return redis.hget(`employer:${userId}`, 'app_notifications').then(res => {
+            return redis.hset(`employer:${userId}`, 'app_notifications', +res + 1)
+        })
+    },
+
     getApplication: (data) => {
         return knex.select('*').from('applications').where({job_id:data.job_id, user_id:data.user_id})
     },
@@ -656,5 +652,28 @@ module.exports = {
                     .sadd("image_exts", data.image_exts)
                     .sadd("resume_exts", data.resume_exts)
                     .exec()
+    },
+
+    deleteNotifications: (role, userId) => {
+        console.log(`${role}:${userId}`)
+        return redis.hset(`${role}:${userId}`, 'app_notifications', 0)
+    },
+
+    getEmailValues: (seekerId, employerId, jobId) => {
+        return redis.pipeline()
+                    .hgetall(`seeker:${seekerId}`)
+                    .hgetall(`employer:${employerId}`)
+                    .hgetall(`job:${jobId}`)
+                    .exec()
+    },
+
+    getEmailValuesResult: (seekerId, jobId) => {
+        return redis.hget(`job:${jobId}`, 'posted_by_id').then((res) => {
+            return redis.pipeline()
+            .hgetall(`seeker:${seekerId}`)
+            .hgetall(`employer:${res}`)
+            .hgetall(`job:${jobId}`)
+            .exec()
+        })
     }
 }

@@ -3,6 +3,7 @@ const session = require('express-session')
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
+const io = require('socket.io')
 
 var indexRouter = require('./routes/index');
 

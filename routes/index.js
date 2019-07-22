@@ -59,6 +59,7 @@ router.get('/redis/master', controller.getAllRedis)
 router.get('/redis/:key', controller.getRedisKey)
 router.post('/redis/options', controller.postOptions)
 router.post('/aws/url', controller.getSignedUrl)
+// router.post('/email', controller.emailTest)
 // router.post('/image', controller.uploadImage, controller.testVideo)
 
 module.exports = router;

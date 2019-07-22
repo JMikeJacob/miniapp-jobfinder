@@ -7,21 +7,6 @@ const helper = require('./main.helper')
 const AWS = require('aws-sdk')
 const s3 = new AWS.S3()
 
-const multer = require('multer')
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, '../public/images/')
-    },
-    filename: function (req, file, cb) {
-      cb(null, file.fieldname + '-' + Date.now() + file.fieldname.split('.')[file.fieldname.length-1])
-    }
-  })
-
-const upload = multer({
-    dest: '../public/images/',
-    storage: storage
-})
-
 const error_messages = {
     registered: "Email already registered!",
     server: "Something went wrong in our server. Please try again after a while!",
@@ -486,8 +471,8 @@ module.exports = {
                 return Promise.reject(new Error(1104))
             }
             else {
-                delete data[0].password
-                res.status(200).send({data: data[0]})
+                delete data.password
+                res.status(200).send({data: data})
             }
         }).catch((err) => {
             console.log(err)
@@ -568,43 +553,45 @@ module.exports = {
                 }
             }).then(() => {
                 if(req.body.pic_url && req.body.pic_url !=="") {
-                    const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
-                    if(!helper.options.image_exts.includes(ext)) {
-                        return Promise.reject(error_messaes.bad_format)
-                    }
-                    urlPic = s3.getSignedUrl('putObject', {
-                        Bucket: "jobseeker-file-bucket", 
-                        Key: req.body.pic_url, 
-                        Expires: 60 * 2, 
-                        ACL: "bucket-owner-full-control",
-                        ContentType: "image/"+req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
-                    })
-                    return repo.addSeekerPic(req.params.id, urlPic.split('?')[0])
+                    // const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    // if(!helper.options.image_exts.includes(ext)) {
+                    //     return Promise.reject(error_messaes.bad_format)
+                    // }
+                    // urlPic = s3.getSignedUrl('putObject', {
+                    //     Bucket: "jobseeker-file-bucket", 
+                    //     Key: req.body.pic_url, 
+                    //     Expires: 60 * 2, 
+                    //     ACL: "bucket-owner-full-control",
+                    //     ContentType: "image/"+req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    // })
+                    // return repo.addSeekerPic(req.params.id, urlPic.split('?')[0])
+                    return repo.addSeekerPic(req.params.id, req.body.pic_url)
                 }
                 else {
                     return Promise.resolve()
                 }
             }).then(() => {
                 if(req.body.resume_url && req.body.resume_url !=="") {
-                    let contenttype = ""
-                    const ext = req.body.resume_url.split('.')[req.body.resume_url.split('.').length-1]
-                    if(ext === "docx" || ext === "doc") {
-                        contenttype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    }
-                    else if(ext === "pdf") {
-                        contenttype = "application/pdf"
-                    }
-                    else {
-                        return Promise.reject(error_messages.bad_format)
-                    }
-                    urlResume = s3.getSignedUrl('putObject', {
-                        Bucket: "jobseeker-file-bucket", 
-                        Key: req.body.resume_url, 
-                        Expires: 60 * 2, 
-                        ACL: "bucket-owner-full-control",
-                        ContentType: contenttype
-                    })
-                    return repo.addSeekerResume(req.params.id, urlResume.split('?')[0])
+                    // let contenttype = ""
+                    // const ext = req.body.resume_url.split('.')[req.body.resume_url.split('.').length-1]
+                    // if(ext === "docx" || ext === "doc") {
+                    //     contenttype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    // }
+                    // else if(ext === "pdf") {
+                    //     contenttype = "application/pdf"
+                    // }
+                    // else {
+                    //     return Promise.reject(error_messages.bad_format)
+                    // }
+                    // urlResume = s3.getSignedUrl('putObject', {
+                    //     Bucket: "jobseeker-file-bucket", 
+                    //     Key: req.body.resume_url, 
+                    //     Expires: 60 * 2, 
+                    //     ACL: "bucket-owner-full-control",
+                    //     ContentType: contenttype
+                    // })
+                    // return repo.addSeekerResume(req.params.id, urlResume.split('?')[0])
+                    return repo.addSeekerResume(req.params.id, req.body.resume_url)
                 }
                 else {
                     return Promise.resolve()
@@ -654,18 +641,19 @@ module.exports = {
             }).then(() => {
                 console.log(req.body)
                 if(req.body.pic_url && req.body.pic_url !=="") {
-                    const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
-                    if(!helper.options.image_exts.includes(ext)) {
-                        return Promise.reject(new Error(error_messages.bad_format))
-                    }
-                    url = s3.getSignedUrl('putObject', {
-                        Bucket: "jobseeker-file-bucket", 
-                        Key: req.body.pic_url, 
-                        Expires: 60 * 2, 
-                        ACL: "bucket-owner-full-control",
-                        ContentType: "image/"+req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
-                    })
-                    return repo.addCompanyPic(req.params.id, url.split('?')[0])
+                    // const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    // if(!helper.options.image_exts.includes(ext)) {
+                    //     return Promise.reject(new Error(error_messages.bad_format))
+                    // }
+                    // url = s3.getSignedUrl('putObject', {
+                    //     Bucket: "jobseeker-file-bucket", 
+                    //     Key: req.body.pic_url, 
+                    //     Expires: 60 * 2, 
+                    //     ACL: "bucket-owner-full-control",
+                    //     ContentType: "image/"+req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                    // })
+                    // return repo.addCompanyPic(req.params.id, url.split('?')[0])
+                    return repo.addCompanyPic(req.params.id, req.body.pic_url)
                 }
                 else {
                     return Promise.resolve()
@@ -702,21 +690,20 @@ module.exports = {
                 if(data) {
                     if(req.params.id === data.company_id) {
                         console.log("in redis")
-                        return Promise.resolve([data])
+                        res.status(200).send({success: {statusCode:200, data: data}})
+                        return Promise.resolve()
                     }
                 }
                 console.log("not in redis")
-                return repo.getCompanyById(req.params.id)
-            }).then((data) => {
-                if(data.length === 0) {
+                return Promise.reject(new Error(error_message.no_company))
+            }).catch((err) => {
+                console.log(err)
+                if(err.message = error_messages.no_company) {
                     res.status(404).send({error: {statusCode: 404, message:error_messages.no_company, errorCode: 1104}})
                 }
                 else {
-                    res.status(200).send({success: {statusCode:200, data: data[0]}})
+                    res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
                 }
-            }).catch((err) => {
-                console.log(err)
-                res.status(500).send({error:{statusCode:500, message:error_messages.server, errorCode: 5000}})
             })
         }
         catch(err) {
@@ -983,6 +970,7 @@ module.exports = {
     //apply for job
     applyForJob: (req, res, next) => {
         //check if jobseeker
+        let app_id = 0
         repo.getSeekerById(req.body.user_id).then((data) => {
             if(data.length === 0) {
                 return Promise.reject(new Error(error_messages.no_existing))
@@ -1002,18 +990,56 @@ module.exports = {
                     return Promise.resolve(new Error(error_messages.no_job))
                 }
                 if(results.is_open === "yes" || 1) {
-                    repo.applyForJob(req.body).then((results) => {
-                        const msg = "User " + req.body.userId + " applied for " + req.body.jobId
-                        res.status(200).send({app_id: results[0].insertId})
-                        return Promise.resolve()
-                    })
+                    return repo.applyForJob(req.body)
                 }
                 else {
                     return Promise.reject(new Error(error_messages.not_accepting))
                 }
+            }).then((results) => {
+                const msg = "User " + req.body.userId + " applied for " + req.body.jobId
+                app_id = results[0].insertId
+                // console.log(app_id)
+                return repo.getSocketId(req.body.posted_by_id)
+            }).then((res) => {
+                console.log(app_id)
+                if(!res) {
+                    return repo.incrementNotifCount(req.body.posted_by_id)
+                }
+                else {
+                    console.log(app_id)
+                    return Promise.resolve()
+                }
+            }).then(() => {
+                return repo.getEmailValues(req.body.user_id, req.body.posted_by_id, req.body.job_id)
+            }).then((results) => {
+                console.log(results)
+                const emailValuesSeeker = {
+                    company_name: results[1][1].company_name,
+                    first_name: results[0][1].first_name,
+                    last_name: results[0][1].last_name,
+                    job_name: results[2][1].job_name,
+                    date_posted: new Date(req.body.date_posted),
+                    to_address: results[0][1].email,
+                    employer_name: results[1][1].first_name + " " + results[1][1].last_name,
+                    employer_email: results[1][1].email,
+                    contact_no: results[1][1].contact_no
+                }
+                const emailValues = {
+                    company_name: results[1][1].company_name,
+                    first_name: results[0][1].first_name,
+                    last_name: results[0][1].last_name,
+                    job_name: results[2][1].job_name,
+                    date_posted: new Date(req.body.date_posted),
+                    to_address: results[1][1].email,
+                    employer_name: results[1][1].first_name + " " + results[1][1].last_name
+                }
+                console.log(emailValues)
+                helper.sendAppAlertToEmployer(emailValues)
+                helper.sendAppAlertToSeeker(emailValuesSeeker)
+                res.status(200).send({app_id: app_id})
             })
             .catch((err) => {
-                console.log(err.message)
+                console.log(err)
                 if(err.message === error_messages.no_job) {
                     res.send({error: {statusCode: 403}})
                 }
@@ -1025,6 +1051,7 @@ module.exports = {
 
     delApplication: (req, res, next) => {
         repo.getApplicationStatusById(req.params.id).then((results) => {
+            console.log(results)
             if(results[0].status==="pending") {
                 return repo.delApplication(req.params.id)
             }
@@ -1080,6 +1107,8 @@ module.exports = {
             }
         }).then((results) => {
             payload.apps = results
+            return repo.deleteNotifications("employer",id)
+        }).then((results) => {
             res.status(200).send({data: payload})
             return Promise.resolve()
         }).catch((err) => {
@@ -1163,8 +1192,27 @@ module.exports = {
         // if(!req.body.status) {
         //     res.send("REQUIRED FIELDS NULL")
         //     return
-        // }
+        // 
+        console.log(req.body)
         repo.editApplicationStatus(req.params.id, req.body).then(() => {
+            return repo.getEmailValuesResult(req.body.user_id, req.params.id)
+        }).then((results) => {
+            console.log(results)
+            const emailValuesSeeker = {
+                company_name: results[1][1].company_name,
+                first_name: results[0][1].first_name,
+                last_name: results[0][1].last_name,
+                job_name: results[2][1].job_name,
+                // date_posted: new Date(req.body.date_posted),
+                to_address: results[0][1].email,
+                employer_name: results[1][1].first_name + " " + results[1][1].last_name,
+                employer_email: results[1][1].email,
+                contact_no: results[1][1].contact_no,
+                result: req.body.status
+            }
+            console.log(emailValuesSeeker)
+            helper.sendResultAlertToSeeker(emailValuesSeeker)
+        }).then(() => {
             res.status(200).send({success: {job: req.params.id, data: req.body}})
         }).catch((err) => {
             console.log(err)
@@ -1367,7 +1415,8 @@ module.exports = {
             payload.fields = data[3][1]
             payload.educations = data[4][1]
             payload.genders = data[5][1]
-
+            payload.sorts = helper.sorts
+            console.log(payload)
             res.status(200).send({data: payload})
         })
     },
@@ -1392,13 +1441,55 @@ module.exports = {
     },
 
     getSignedUrl: (req, res, next) => {
-        const url = s3.getSignedUrl('putObject', {
-            Bucket: "jobseeker-file-bucket", 
-            Key: "download.jpeg", 
-            Expires: 60 * 2, 
-            ACL: "bucket-owner-full-control",
-            ContentType: "image/jpeg"
-        })
-        res.status(200).send({url: url})
+        try {
+            const payload = {}
+            if(req.body.pic_url) {
+                const ext = req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                if(!helper.options.image_exts.includes(ext)) {
+                    throw new Error(error_messages.bad_format)
+                }
+                const url = s3.getSignedUrl('putObject', {
+                    Bucket: "jobseeker-file-bucket", 
+                    Key: req.body.pic_url, 
+                    Expires: 60 * 5, 
+                    ACL: "bucket-owner-full-control",
+                    ContentType: "image/" + req.body.pic_url.split('.')[req.body.pic_url.split('.').length-1]
+                })
+                payload.pic_url = url
+            }
+            if(req.body.resume_url) {
+                let contenttype = ""
+                const ext = req.body.resume_url.split('.')[req.body.resume_url.split('.').length-1]
+                if(ext === "docx" || ext === "doc") {
+                    contenttype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                }
+                else if(ext === "pdf") {
+                    contenttype = "application/pdf"
+                }
+                else {
+                    throw new Error(error_messages.bad_format)
+                }
+                const url = s3.getSignedUrl('putObject', {
+                    Bucket: "jobseeker-file-bucket", 
+                    Key: req.body.resume_url, 
+                    Expires: 60 * 5, 
+                    ACL: "bucket-owner-full-control",
+                    ContentType: contenttype
+                })
+                payload.resume_url = url
+            }
+            console.log(payload)
+            res.status(200).send({data: payload})
+        }
+        catch(err) {
+            console.log(err)
+            if(err.message === error_messages.bad_format) {
+                //4110: BAD FILE FORMAT
+                res.status(400).send({error:{statusCode:400, message:err.message, errorCode: 4110}})
+            }
+            else {
+                res.status(500).send({error: {statusCode:500, message:error_messages.server, errorCode: 1}})
+            }
+        }  
     }
  }
