@@ -1273,35 +1273,176 @@ module.exports = {
             const limit = req.query.limit || 20
             const start = limit * (req.params.id - 1) || 0
             console.log(req.params)
-            repo.getJobCount().then((results) => {
-                if(results.length === 0) {
-                    res.status(200).send({data: {count: 0}})
-                    return Promise.reject("no error")
+            /* WITH FILTER */
+            if(req.query.l || req.query.f || req.query.t) {
+                console.log(req.query.t)
+                let filter_flags = []
+                let levels = []
+                let fields = []
+                let types = []
+                if(req.query.l && req.query.l !== "") {
+                    filter_flags.push("levels")
+                    levels = req.query.l ? req.query.l.split(';') : null
                 }
-                else {
-                    payload.count = results[0][0].count
-                    return repo.getJobsPerPage(order, how, start, limit)
+                if(req.query.t && req.query.t!== "") {
+                    filter_flags.push("types")
+                    types = req.query.t ? req.query.t.split(';') : null
                 }
-            }).then((results) => {
-                console.log(results)
-                if(results.length === 0) {
-                //error 1200 = no jobs found
-                //error 5000 = server error
-                    res.status(200).send({data: {count: 0}})
-                    return Promise.reject("no error")
+                if(req.query.f && req.query.f !== "") {
+                    filter_flags.push("fields")
+                    fields = req.query.f ? req.query.f.split(';') : null
                 }
-                else {
-                    payload.jobs = results
-                    res.status(200).send({data: payload})
-                }
-            }).catch((err) => {
-                console.error(err)
-                
-                if(err != "no error") {
-                    res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
-                }
-            })
-
+                Promise.resolve().then(() => {
+                    /* LEVEL TIER */
+                    if(filter_flags.includes("levels")) { // 1 X X
+                        return repo.getJobsWithLevels(levels)
+                    }
+                    else { // 0 X X
+                        return Promise.resolve("no levels")
+                    }
+                }).then((results) => {
+                    /* TYPE TIER */
+                    if(!results || results.length === 0) {
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.reject("no error")
+                    }
+                    if(results === "no levels") { // 0 X X
+                        if(filter_flags.includes("types")) { // 0 1 X
+                            return repo.getJobsWithTypesStart(types)
+                        }
+                        else { // 0 0 X
+                            return Promise.resolve("no types nor levels")
+                        }
+                    }
+                    else { // 1 X X
+                        if(filter_flags.includes("types")) { // 1 1 X
+                            return repo.getJobsWithTypes(types, helper.extractJobIds(results))
+                        }
+                        else { // 1 0 X
+                            return Promise.resolve(results)
+                        }
+                    }
+                }).then((results) => {
+                    /* FIELD TIER */
+                    if(!results || results.length === 0) {
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.reject("no error")
+                    }
+                    if(results === "no types nor levels") { // X 0 X
+                        console.log("yo")
+                        return repo.getJobsWithFieldsStart(fields)
+                    }
+                    else { // at least one tier has results
+                        if(filter_flags.includes("fields")) {
+                            return repo.getJobsWithFields(fields, helper.extractJobIds(results))
+                        }
+                        else {
+                            return Promise.resolve(results)
+                        }
+                    }
+                }).then((results) => {
+                    if(req.query.search) {
+                        payload.jobs = results
+                        return repo.getJobCountFilterSearch(helper.extractJobIds(results), req.query.search)
+                    }
+                    else {
+                        payload.count = results.length
+                        return repo.getJobsPerPageFilter(order, how, start, limit, helper.extractJobIds(results))
+                    }
+                }).then((results) => {
+                    console.log(results)
+                    if(payload.count) {
+                        payload.jobs = results
+                        res.status(200).send({data: payload})
+                        return Promise.resolve("sent jobs")
+                    }
+                    else if(results.length === 0 || results[0].count === 0) {
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.reject("no error")
+                    }
+                    else {
+                        payload.count = results[0].count
+                        return repo.getJobsPerPageFilterSearch(order, how, start, limit, helper.extractJobIds(payload.jobs), req.query.search)
+                    }
+                }).then((results) => {
+                    if(results === "sent jobs") {
+                        return Promise.resolve()
+                    }
+                    else {
+                        payload.jobs = results
+                        res.status(200).send({data: payload})
+                        return Promise.resolve()
+                    }
+                }).catch((err) => {
+                    console.error(err)
+                    
+                    if(err !== "no error") {
+                        res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                    }
+                })
+            }
+            /* END FILTER */
+            /* NO FILTER */
+            else if(req.query.search) {
+                // console.log(req.query.search)
+                repo.getJobCountSearch(req.query.search).then((results) => {
+                    console.log(results)
+                    if(results.length === 0 || results[0][0].count === 0) {
+                        console.log("woops")
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.reject("no error")
+                    }
+                    else {
+                        payload.count = results[0][0].count
+                        return repo.getJobsPerPageSearch(order, how, start, limit, req.query.search)
+                    }
+                }).then((results) => {
+                    // console.log(results)
+                    if(results.length === 0) {
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.resolve()
+                    }
+                    else {
+                        payload.jobs = results
+                        res.status(200).send({data: payload})
+                        return Promise.resolve()
+                    }
+                }).catch((err) => {
+                    console.error(err)
+                    if(err !== "no error") {
+                        res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                    }
+                })
+            }
+            else {
+                repo.getJobCount().then((results) => {
+                    if(results.length === 0 || results[0][0].count === 0) {
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.reject("no error")
+                    }
+                    else {
+                        payload.count = results[0][0].count
+                        return repo.getJobsPerPage(order, how, start, limit)
+                    }
+                }).then((results) => {
+                    console.log(results)
+                    if(results.length === 0) {
+                    //error 1200 = no jobs found
+                    //error 5000 = server error
+                        res.status(200).send({data: {count: 0}})
+                        return Promise.resolve()
+                    }
+                    else {
+                        payload.jobs = results
+                        res.status(200).send({data: payload})
+                    }
+                }).catch((err) => {
+                    console.error(err)
+                    if(err !== "no error") {
+                        res.status(500).send({error:{statusCode: 500, message: error_messages.server, errorCode: 5000}})
+                    }
+                })
+            }
         }
         catch(err) {
             console.error(err)

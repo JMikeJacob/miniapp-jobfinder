@@ -566,6 +566,20 @@ module.exports = {
         return knex.select('*').from('job_post').orderBy(order, how).offset(offset).limit(limit)
     },
 
+    getJobsPerPageSearch: (order, how, offset, limit, search) => {
+        return knex.select('*').from('job_post').where('company_name', 'like', search+'%').orWhere('job_name', 'like', search+'%').orderBy(order, how).offset(offset).limit(limit)
+    },
+
+    getJobsPerPageFilter: (order, how, offset, limit, filters) => {
+        // return knex.raw("SELECT * FROM jobs ORDER BY job_posted DESC LIMIT ?, ?", [start, end])
+        // console.log(order + how + offset + limit)
+        return knex.select('*').from('job_post').whereIn('job_id',filters).orderBy(order, how).offset(offset).limit(limit)
+    },
+
+    getJobsPerPageFilterSearch: (order, how, offset, limit, filters, search) => {
+        return knex.select('*').from('job_post').whereIn('job_id',filters).where('company_name', 'like', search+'%').orWhere('job_name', 'like', search+'%').orderBy(order, how).offset(offset).limit(limit)
+    },
+
     getJobsPerPageEmployer: (order, how, offset, limit, id) => {
         // return knex.raw("SELECT * FROM jobs ORDER BY job_posted DESC LIMIT ?, ?", [start, end])
         // console.log(order + how + offset + limit)
@@ -584,10 +598,43 @@ module.exports = {
         return knex.raw("SELECT COUNT(*) AS count FROM job_post")
     },
 
+    getJobCountSearch: (search) => {
+        return knex.raw("SELECT COUNT(*) AS count FROM job_post WHERE company_name LIKE ? OR job_name LIKE ?", [search+'%', search+'%'])
+    },
+
+    getJobCountFilterSearch: (jobs, search) => {
+        console.log(knex.count('* as count').from('job_post').where('company_name', 'like', search).orWhere('job_name', 'like', search).whereIn('job_id', jobs).toSQL())
+        return knex.count('* as count').from('job_post').whereIn('job_id', jobs).where('company_name', 'like', search+'%').orWhere('job_name', 'like', search+'%')
+    },
+
     getJobCountEmployer: (id) => {
         return knex.raw("SELECT COUNT(*) AS count FROM job_post WHERE posted_by_id=?", [id])
     },
 
+    getJobsWithLevels: (levels) => {
+        // console.log(knex.select('*').from('job_post').whereIn('tag', levels).toString())
+        return knex.select('job_id').from('job_tags').whereIn('tag', levels).groupBy('job_id')
+    },
+
+    getJobsWithTypes: (types, jobs) => {
+        // console.log(table)
+        return knex.select('job_id').from('job_tags').whereIn('tag', types).whereIn('job_id', jobs).groupBy('job_id')
+    },
+
+    getJobsWithTypesStart: (types) => {
+        // console.log(jobs)
+        return knex.select('job_id').from('job_tags').whereIn('tag', types).groupBy('job_id')
+    },
+
+    getJobsWithFields: (fields, jobs) => {
+        return knex.select('job_id').from('job_tags').whereIn('tag', fields).whereIn('job_id', jobs).groupBy('job_id')
+    },
+
+    getJobsWithFieldsStart: (fields) => {
+        // console.log(jobs)
+        return knex.select('job_id').from('job_tags').whereIn('tag', fields).groupBy('job_id')
+    },
+    
     getApplicationsPerPage: (order, how, offset, limit, id) => {
         return knex.select('app_id', 'applications.user_id', 'status', 'seeker_accounts.last_name', 'seeker_accounts.first_name', 'applications.job_id', 'applications.posted_by_id', 'applications.date_posted', 'job_name', 'company_name', 'is_open')
                    .from('applications')

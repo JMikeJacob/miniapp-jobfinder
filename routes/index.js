@@ -61,5 +61,6 @@ router.post('/redis/options', controller.postOptions)
 router.post('/aws/url', controller.getSignedUrl)
 // router.post('/email', controller.emailTest)
 // router.post('/image', controller.uploadImage, controller.testVideo)
+// router.get('/test/filter', controller.getJobsByPageFilter)
 
 module.exports = router;

@@ -1,13 +1,9 @@
 const AWS = require('aws-sdk')
 // AWS.config.update({region: 'us-west-2'})
 // const ses = new AWS.SES({ 
-//     accessKeyId: "AKIASBPVXNWFMRIOG3GX",
-//     secretAccessKey: "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",
 //     apiVersion: "2010-12-01", 
 //     region: 'us-west-2'})
 const pinpoint = new AWS.Pinpoint({
-    accessKeyId: "AKIASBPVXNWFMRIOG3GX",
-    secretAccessKey: "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",
     apiVersion: "2016-12-01", 
     region: 'us-west-2'
 })
@@ -48,6 +44,14 @@ module.exports = {
         convert += "]"
 
         return convert
+    },
+
+    extractJobIds: (rows) => {
+        const filters = []
+        for(let i = 0; i < rows.length; i++) {
+            filters.push(rows[i].job_id)
+        }
+        return filters
     },
 
     sendAppAlertToEmployer: (data) => {
