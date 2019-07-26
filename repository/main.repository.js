@@ -1,7 +1,7 @@
 const knex = require('knex')({
     client: 'mysql', 
     connection: {
-        host: 'localhost',
+        host: 'mysql',
         port: '3306',
         user: 'root',
         password: 'root',
@@ -12,7 +12,7 @@ const knex = require('knex')({
 const Redis = require('ioredis')
 const redis = new Redis({
     port: 6379,
-    host: 'localhost',
+    host: 'redis',
     family: 4,
     // password: 'root',
     db: 0

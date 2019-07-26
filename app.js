@@ -17,17 +17,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const cors = require('cors')
 
-const originsWhiteList = [
-  'http://localhost:4200'
-]
+// const originsWhiteList = [
+//   'http://localhost:4200'
+// ]
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    const isWhiteListed = originsWhiteList.indexOf(origin) !== -1
-    callback(null, isWhiteListed)
-  },
-  credentials: true
-}
+// const corsOptions = {
+//   origin: (origin, callback) => {
+//     const isWhiteListed = originsWhiteList.indexOf(origin) !== -1
+//     callback(null, isWhiteListed)
+//   },
+//   credentials: true
+// }
 // app.use(session({
 //     secret: "CoE Was Here",
 //     cookie: {
@@ -37,9 +37,8 @@ const corsOptions = {
 //     saveUninitialized: false
 // }))
 // app.use(cors(corsOptions))
-app.use(cors({origin: [
-    "http://localhost:4200"
-  ], credentials: true}))
+app.use(cors({origin: ["http://localhost:4200"], credentials: true}))
+
 app.use('/', indexRouter);
 
 module.exports = app;
